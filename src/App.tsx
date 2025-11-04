@@ -11,6 +11,11 @@ import ForgotPassword from "./pages/ForgotPassword";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Catalog from "./pages/Catalog";
+import CourseDetail from "./pages/CourseDetail";
+import InstructorDashboard from "./pages/instructor/InstructorDashboard";
+import CreateCourse from "./pages/instructor/CreateCourse";
+import EditCourse from "./pages/instructor/EditCourse";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +35,11 @@ const App = () => (
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/catalog" element={<Catalog />} />
+            <Route path="/course/:slug" element={<CourseDetail />} />
+            <Route path="/instructor" element={<InstructorDashboard />} />
+            <Route path="/instructor/courses/new" element={<CreateCourse />} />
+            <Route path="/instructor/courses/:id/edit" element={<EditCourse />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
