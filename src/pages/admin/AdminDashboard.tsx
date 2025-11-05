@@ -214,7 +214,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleRemoveRole = async (userId: string, role: string) => {
+  const handleRemoveRole = async (userId: string, role: 'admin' | 'instructor' | 'student') => {
     const { error } = await supabase
       .from('user_roles')
       .delete()
