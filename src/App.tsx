@@ -16,6 +16,11 @@ import InstructorDashboard from "./pages/instructor/InstructorDashboard";
 import CreateCourse from "./pages/instructor/CreateCourse";
 import EditCourse from "./pages/instructor/EditCourse";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import StudentDashboard from "./pages/student/StudentDashboard";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFailure from "./pages/PaymentFailure";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +41,11 @@ const App = () => (
             <Route path="/contact" element={<Contact />} />
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/course/:slug" element={<CourseDetail />} />
+            <Route path="/dashboard" element={<StudentDashboard />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/payment/success" element={<PaymentSuccess />} />
+            <Route path="/payment/failure" element={<PaymentFailure />} />
             <Route path="/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/courses/new" element={<CreateCourse />} />
             <Route path="/instructor/courses/:id/edit" element={<EditCourse />} />

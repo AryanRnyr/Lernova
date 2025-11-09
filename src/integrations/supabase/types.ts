@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      cart_items: {
+        Row: {
+          added_at: string
+          course_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          course_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          course_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cart_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -205,6 +234,7 @@ export type Database = {
           payment_method: string
           payment_reference: string | null
           status: Database["public"]["Enums"]["order_status"]
+          transaction_uuid: string | null
           updated_at: string
           user_id: string
         }
@@ -216,6 +246,7 @@ export type Database = {
           payment_method: string
           payment_reference?: string | null
           status?: Database["public"]["Enums"]["order_status"]
+          transaction_uuid?: string | null
           updated_at?: string
           user_id: string
         }
@@ -227,6 +258,7 @@ export type Database = {
           payment_method?: string
           payment_reference?: string | null
           status?: Database["public"]["Enums"]["order_status"]
+          transaction_uuid?: string | null
           updated_at?: string
           user_id?: string
         }
