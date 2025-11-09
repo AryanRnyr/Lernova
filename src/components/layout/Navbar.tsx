@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useCart } from '@/hooks/useCart';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,11 +14,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, GraduationCap, User, LogOut, LayoutDashboard, BookOpen, Settings } from 'lucide-react';
+import { Menu, GraduationCap, User, LogOut, LayoutDashboard, BookOpen, Settings, ShoppingCart } from 'lucide-react';
 
 export const Navbar = () => {
   const { user, signOut } = useAuth();
   const { isAdmin, isInstructor } = useUserRole();
+  const { count } = useCart();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -66,6 +68,18 @@ export const Navbar = () => {
 
         {/* Desktop Auth Buttons */}
         <div className="hidden md:flex items-center gap-4">
+          {user && (
+            <Button variant="ghost" size="icon" asChild className="relative">
+              <Link to="/cart">
+                <ShoppingCart className="h-5 w-5" />
+                {count > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
+                    {count}
+                  </span>
+                )}
+              </Link>
+            </Button>
+          )}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
