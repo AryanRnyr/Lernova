@@ -98,26 +98,25 @@ export const Navbar = () => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link to="/dashboard" className="cursor-pointer">
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    Dashboard
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to="/my-courses" className="cursor-pointer">
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    My Courses
-                  </Link>
-                </DropdownMenuItem>
-                {(isInstructor() || isAdmin()) && (
+                {/* Student Dashboard - only for users who are NOT instructors or admins */}
+                {!isInstructor() && !isAdmin() && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard" className="cursor-pointer">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      My Learning
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {/* Instructor Dashboard - only for instructors (not admins unless they're also instructors) */}
+                {isInstructor() && (
                   <DropdownMenuItem asChild>
                     <Link to="/instructor" className="cursor-pointer">
-                      <User className="mr-2 h-4 w-4" />
+                      <BookOpen className="mr-2 h-4 w-4" />
                       Instructor Dashboard
                     </Link>
                   </DropdownMenuItem>
                 )}
+                {/* Admin Panel - only for admins */}
                 {isAdmin() && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin" className="cursor-pointer">
@@ -167,12 +166,21 @@ export const Navbar = () => {
               <hr className="my-2" />
               {user ? (
                 <>
-                  <Link to="/dashboard" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
-                    Dashboard
-                  </Link>
-                  <Link to="/my-courses" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
-                    My Courses
-                  </Link>
+                  {!isInstructor() && !isAdmin() && (
+                    <Link to="/dashboard" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                      My Learning
+                    </Link>
+                  )}
+                  {isInstructor() && (
+                    <Link to="/instructor" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                      Instructor Dashboard
+                    </Link>
+                  )}
+                  {isAdmin() && (
+                    <Link to="/admin" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                      Admin Panel
+                    </Link>
+                  )}
                   <Button variant="destructive" onClick={handleSignOut} className="mt-4">
                     Log out
                   </Button>

@@ -17,6 +17,7 @@ import CreateCourse from "./pages/instructor/CreateCourse";
 import EditCourse from "./pages/instructor/EditCourse";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import StudentDashboard from "./pages/student/StudentDashboard";
+import CourseLearning from "./pages/student/CourseLearning";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/contact" element={<Contact />} />
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/course/:slug" element={<CourseDetail />} />
+            <Route path="/learn/:slug" element={<CourseLearning />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
