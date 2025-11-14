@@ -44,7 +44,8 @@ interface Course {
   status: string;
   instructor_id: string;
   category: { name: string } | null;
-  instructor: { full_name: string | null; avatar_url: string | null } | null;
+  instructor_name: string | null;
+  instructor_avatar: string | null;
 }
 
 interface Review {
@@ -52,7 +53,8 @@ interface Review {
   rating: number;
   comment: string | null;
   created_at: string;
-  user: { full_name: string | null } | null;
+  user_id: string;
+  reviewer_name: string | null;
 }
 
 const CourseDetail = () => {
@@ -87,8 +89,7 @@ const CourseDetail = () => {
           total_duration,
           status,
           instructor_id,
-          category:categories(name),
-          instructor:profiles!courses_instructor_id_fkey(full_name, avatar_url)
+          category:categories(name)
         `)
         .eq('slug', slug)
         .maybeSingle();
@@ -103,7 +104,16 @@ const CourseDetail = () => {
         return;
       }
 
-      setCourse(courseData as unknown as Course);
+      // Fetch instructor profile using security function
+      const { data: instructorData } = await supabase
+        .rpc('get_instructor_profile', { instructor_user_id: courseData.instructor_id });
+      const instructor = Array.isArray(instructorData) ? instructorData[0] : instructorData;
+
+      setCourse({
+        ...courseData,
+        instructor_name: instructor?.full_name || null,
+        instructor_avatar: instructor?.avatar_url || null,
+      } as Course);
 
       // Fetch sections with subsections
       const { data: sectionsData } = await supabase
@@ -139,7 +149,7 @@ const CourseDetail = () => {
           rating,
           comment,
           created_at,
-          user:profiles!reviews_user_id_fkey(full_name)
+          user_id
         `)
         .eq('course_id', courseData.id)
         .eq('is_approved', true)
@@ -147,7 +157,18 @@ const CourseDetail = () => {
         .limit(10);
 
       if (reviewsData) {
-        setReviews(reviewsData as unknown as Review[]);
+        // Fetch reviewer names using security function
+        const reviewsWithNames = await Promise.all(
+          reviewsData.map(async (review: any) => {
+            const { data: reviewerData } = await supabase
+              .rpc('get_reviewer_name', { reviewer_user_id: review.user_id });
+            return {
+              ...review,
+              reviewer_name: reviewerData || null,
+            };
+          })
+        );
+        setReviews(reviewsWithNames as Review[]);
       }
 
       // Check enrollment
@@ -305,7 +326,7 @@ const CourseDetail = () => {
               <p className="text-sm">
                 Created by{' '}
                 <span className="font-medium">
-                  {course.instructor?.full_name || 'Unknown Instructor'}
+                  {course.instructor_name || 'Unknown Instructor'}
                 </span>
               </p>
             </div>
@@ -452,7 +473,7 @@ const CourseDetail = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-medium">
-                              {review.user?.full_name || 'Anonymous'}
+                              {review.reviewer_name || 'Anonymous'}
                             </span>
                             <div className="flex items-center">
                               {[...Array(5)].map((_, i) => (

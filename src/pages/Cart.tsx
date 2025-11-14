@@ -119,7 +119,7 @@ const Cart = () => {
                           {item.course?.title}
                         </Link>
                         <p className="text-sm text-muted-foreground">
-                          {item.course?.instructor?.full_name || 'Unknown Instructor'}
+                          {item.course?.instructor_name || 'Unknown Instructor'}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
