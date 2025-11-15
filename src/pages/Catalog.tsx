@@ -18,8 +18,9 @@ interface Course {
   price: number;
   is_free: boolean;
   total_duration: number | null;
+  instructor_id: string;
   category: { name: string } | null;
-  instructor: { full_name: string | null } | null;
+  instructor_name: string | null;
 }
 
 interface Category {
@@ -59,8 +60,8 @@ const Catalog = () => {
           price,
           is_free,
           total_duration,
-          category:categories(name),
-          instructor:profiles!courses_instructor_id_fkey(full_name)
+          instructor_id,
+          category:categories(name)
         `)
         .eq('status', 'published')
         .order('created_at', { ascending: false });
@@ -72,7 +73,19 @@ const Catalog = () => {
       const { data: coursesData } = await query;
 
       if (coursesData) {
-        setCourses(coursesData as unknown as Course[]);
+        // Fetch instructor names using the security function
+        const coursesWithInstructors = await Promise.all(
+          coursesData.map(async (course: any) => {
+            const { data: instructorData } = await supabase
+              .rpc('get_instructor_profile', { instructor_user_id: course.instructor_id });
+            const instructor = Array.isArray(instructorData) ? instructorData[0] : instructorData;
+            return {
+              ...course,
+              instructor_name: instructor?.full_name || null,
+            };
+          })
+        );
+        setCourses(coursesWithInstructors as Course[]);
       }
 
       setLoading(false);
@@ -194,7 +207,7 @@ const Catalog = () => {
                       )}
                       <h3 className="font-semibold line-clamp-2">{course.title}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {course.instructor?.full_name || 'Unknown Instructor'}
+                        {course.instructor_name || 'Unknown Instructor'}
                       </p>
                     </CardHeader>
                     <CardContent className="pb-2">

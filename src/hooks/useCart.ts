@@ -14,9 +14,8 @@ interface CartItem {
     price: number;
     is_free: boolean;
     thumbnail_url: string | null;
-    instructor: {
-      full_name: string | null;
-    } | null;
+    instructor_id: string;
+    instructor_name: string | null;
   };
 }
 
@@ -49,9 +48,7 @@ export function useCart() {
             price,
             is_free,
             thumbnail_url,
-            instructor:profiles!courses_instructor_id_fkey (
-              full_name
-            )
+            instructor_id
           )
         `)
         .eq('user_id', user.id)
@@ -59,13 +56,30 @@ export function useCart() {
 
       if (error) throw error;
 
-      const cartItems = (data || []).map((item: any) => ({
-        ...item,
-        course: {
-          ...item.course,
-          instructor: item.course?.instructor || null,
-        },
-      }));
+      // Fetch instructor names for each course
+      const cartItems = await Promise.all(
+        (data || []).map(async (item: any) => {
+          if (item.course?.instructor_id) {
+            const { data: instructorData } = await supabase
+              .rpc('get_instructor_profile', { instructor_user_id: item.course.instructor_id });
+            const instructor = Array.isArray(instructorData) ? instructorData[0] : instructorData;
+            return {
+              ...item,
+              course: {
+                ...item.course,
+                instructor_name: instructor?.full_name || null,
+              },
+            };
+          }
+          return {
+            ...item,
+            course: {
+              ...item.course,
+              instructor_name: null,
+            },
+          };
+        })
+      );
 
       setItems(cartItems);
       setCount(cartItems.length);
