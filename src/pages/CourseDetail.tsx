@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCart } from '@/hooks/useCart';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen } from 'lucide-react';
+import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart } from 'lucide-react';
 
 interface Subsection {
   id: string;
@@ -60,6 +61,7 @@ interface Review {
 const CourseDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
+  const { addToCart, items: cartItems } = useCart();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -70,7 +72,9 @@ const CourseDetail = () => {
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
 
+  const isInCart = course ? cartItems.some(item => item.course_id === course.id) : false;
   useEffect(() => {
     const fetchCourse = async () => {
       if (!slug) return;
@@ -230,11 +234,27 @@ const CourseDetail = () => {
         });
       }
     } else {
-      // Redirect to checkout for paid courses
-      navigate(`/checkout/${course.slug}`);
+      // Add to cart and redirect to cart/checkout
+      const added = await addToCart(course.id);
+      if (added) {
+        navigate('/cart');
+      }
     }
 
     setEnrolling(false);
+  };
+
+  const handleAddToCart = async () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (!course) return;
+
+    setAddingToCart(true);
+    await addToCart(course.id);
+    setAddingToCart(false);
   };
 
   const formatPrice = (price: number) => {
@@ -363,15 +383,43 @@ const CourseDetail = () => {
                         Continue Learning
                       </Link>
                     </Button>
-                  ) : (
+                  ) : course.is_free ? (
                     <Button
                       className="w-full"
                       size="lg"
                       onClick={handleEnroll}
                       disabled={enrolling}
                     >
-                      {course.is_free ? 'Enroll Now - Free' : 'Buy Now'}
+                      Enroll Now - Free
                     </Button>
+                  ) : isInCart ? (
+                    <Button className="w-full" size="lg" asChild>
+                      <Link to="/cart">
+                        <ShoppingCart className="mr-2 h-5 w-5" />
+                        Go to Cart
+                      </Link>
+                    </Button>
+                  ) : (
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full"
+                        size="lg"
+                        onClick={handleEnroll}
+                        disabled={enrolling}
+                      >
+                        Buy Now
+                      </Button>
+                      <Button
+                        className="w-full"
+                        size="lg"
+                        variant="outline"
+                        onClick={handleAddToCart}
+                        disabled={addingToCart}
+                      >
+                        <ShoppingCart className="mr-2 h-5 w-5" />
+                        Add to Cart
+                      </Button>
+                    </div>
                   )}
 
                   <Separator />
