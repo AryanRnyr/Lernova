@@ -110,22 +110,28 @@ export type Database = {
           completed: boolean
           completed_at: string | null
           id: string
+          last_watched_at: string | null
           subsection_id: string
           user_id: string
+          video_progress: number | null
         }
         Insert: {
           completed?: boolean
           completed_at?: string | null
           id?: string
+          last_watched_at?: string | null
           subsection_id: string
           user_id: string
+          video_progress?: number | null
         }
         Update: {
           completed?: boolean
           completed_at?: string | null
           id?: string
+          last_watched_at?: string | null
           subsection_id?: string
           user_id?: string
+          video_progress?: number | null
         }
         Relationships: [
           {
