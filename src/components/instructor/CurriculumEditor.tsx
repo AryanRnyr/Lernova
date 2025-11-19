@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { CloudinaryUpload } from '@/components/ui/cloudinary-upload';
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,7 +18,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Plus, ChevronDown, ChevronRight, GripVertical, Trash2, Edit, Video, FileText } from 'lucide-react';
 
@@ -420,16 +420,12 @@ export const CurriculumEditor = ({ courseId }: CurriculumEditorProps) => {
                 onChange={(e) => setLectureTitle(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lecture-video">Video URL (Cloudinary)</Label>
-              <Input
-                id="lecture-video"
-                type="url"
-                placeholder="https://res.cloudinary.com/..."
-                value={lectureVideoUrl}
-                onChange={(e) => setLectureVideoUrl(e.target.value)}
-              />
-            </div>
+            <CloudinaryUpload
+              type="video"
+              value={lectureVideoUrl}
+              onChange={setLectureVideoUrl}
+              label="Lecture Video"
+            />
             <div className="space-y-2">
               <Label htmlFor="lecture-duration">Duration (seconds)</Label>
               <Input

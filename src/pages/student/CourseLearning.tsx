@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,8 +35,10 @@ interface Course {
   instructor_id: string;
 }
 
-interface CompletedLesson {
+interface ProgressData {
   subsection_id: string;
+  completed: boolean;
+  video_progress: number | null;
 }
 
 export default function CourseLearning() {
@@ -48,11 +50,14 @@ export default function CourseLearning() {
   const [course, setCourse] = useState<Course | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [completedLessons, setCompletedLessons] = useState<Set<string>>(new Set());
+  const [videoProgress, setVideoProgress] = useState<Map<string, number>>(new Map());
   const [currentLesson, setCurrentLesson] = useState<Subsection | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [markingComplete, setMarkingComplete] = useState(false);
   const [instructorName, setInstructorName] = useState<string>('Instructor');
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -113,8 +118,10 @@ export default function CourseLearning() {
         .eq('course_id', courseData.id)
         .order('position');
 
+      let sectionsWithSubs: Section[] = [];
+      
       if (sectionsData) {
-        const sectionsWithSubs = await Promise.all(
+        sectionsWithSubs = await Promise.all(
           sectionsData.map(async (section) => {
             const { data: subs } = await supabase
               .from('subsections')
@@ -126,35 +133,76 @@ export default function CourseLearning() {
           })
         );
         setSections(sectionsWithSubs);
-
-        // Set first lesson as current if none selected
-        if (sectionsWithSubs.length > 0 && sectionsWithSubs[0].subsections.length > 0) {
-          setCurrentLesson(sectionsWithSubs[0].subsections[0]);
-        }
       }
 
-      // Fetch completed lessons
-      const allSubsectionIds = (sectionsData || []).flatMap((s) => 
-        s.id ? [s.id] : []
-      );
-      
       // Get all subsection IDs for this course
       const { data: allSubs } = await supabase
         .from('subsections')
         .select('id, section_id')
         .in('section_id', sectionsData?.map(s => s.id) || []);
 
-      if (allSubs) {
+      if (allSubs && allSubs.length > 0) {
         const { data: progress } = await supabase
           .from('course_progress')
-          .select('subsection_id')
+          .select('subsection_id, completed, video_progress')
           .eq('user_id', user!.id)
-          .eq('completed', true)
           .in('subsection_id', allSubs.map(s => s.id));
 
         if (progress) {
-          setCompletedLessons(new Set(progress.map((p) => p.subsection_id)));
+          const completed = new Set<string>();
+          const videoProgressMap = new Map<string, number>();
+          
+          progress.forEach((p: ProgressData) => {
+            if (p.completed) {
+              completed.add(p.subsection_id);
+            }
+            if (p.video_progress) {
+              videoProgressMap.set(p.subsection_id, p.video_progress);
+            }
+          });
+          
+          setCompletedLessons(completed);
+          setVideoProgress(videoProgressMap);
+          
+          // Find the last watched lesson or first incomplete lesson
+          if (sectionsWithSubs.length > 0) {
+            let resumeLesson: Subsection | null = null;
+            
+            // First, try to find a lesson with saved progress
+            for (const section of sectionsWithSubs) {
+              for (const sub of section.subsections) {
+                if (videoProgressMap.has(sub.id) && !completed.has(sub.id)) {
+                  resumeLesson = sub;
+                  break;
+                }
+              }
+              if (resumeLesson) break;
+            }
+            
+            // If no lesson with progress, find first incomplete
+            if (!resumeLesson) {
+              for (const section of sectionsWithSubs) {
+                for (const sub of section.subsections) {
+                  if (!completed.has(sub.id)) {
+                    resumeLesson = sub;
+                    break;
+                  }
+                }
+                if (resumeLesson) break;
+              }
+            }
+            
+            if (resumeLesson) {
+              setCurrentLesson(resumeLesson);
+            } else if (sectionsWithSubs[0]?.subsections[0]) {
+              // If all completed, start from beginning
+              setCurrentLesson(sectionsWithSubs[0].subsections[0]);
+            }
+          }
         }
+      } else if (sectionsWithSubs.length > 0 && sectionsWithSubs[0].subsections.length > 0) {
+        // No progress data, start from beginning
+        setCurrentLesson(sectionsWithSubs[0].subsections[0]);
       }
     } catch (error) {
       console.error('Error fetching course data:', error);
@@ -164,7 +212,76 @@ export default function CourseLearning() {
     }
   };
 
+  // Save video progress to database (debounced)
+  const saveVideoProgress = useCallback(async (subsectionId: string, currentTime: number) => {
+    if (!user) return;
+    
+    try {
+      await supabase.from('course_progress').upsert({
+        user_id: user.id,
+        subsection_id: subsectionId,
+        video_progress: Math.floor(currentTime),
+        last_watched_at: new Date().toISOString(),
+        completed: completedLessons.has(subsectionId),
+      }, {
+        onConflict: 'user_id,subsection_id',
+      });
+    } catch (error) {
+      console.error('Error saving video progress:', error);
+    }
+  }, [user, completedLessons]);
+
+  // Handle video time update (debounced save every 5 seconds)
+  const handleTimeUpdate = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    const currentTime = video.currentTime;
+    
+    if (!currentLesson) return;
+
+    // Update local state
+    setVideoProgress(prev => new Map(prev).set(currentLesson.id, currentTime));
+
+    // Debounce save to database
+    if (progressSaveTimeout.current) {
+      clearTimeout(progressSaveTimeout.current);
+    }
+    
+    progressSaveTimeout.current = setTimeout(() => {
+      saveVideoProgress(currentLesson.id, currentTime);
+    }, 5000); // Save every 5 seconds
+  }, [currentLesson, saveVideoProgress]);
+
+  // Handle video ended
+  const handleVideoEnded = useCallback(() => {
+    if (currentLesson && !completedLessons.has(currentLesson.id)) {
+      markLessonComplete();
+    }
+  }, [currentLesson, completedLessons]);
+
+  // Set video to saved position when lesson changes
+  useEffect(() => {
+    if (videoRef.current && currentLesson) {
+      const savedProgress = videoProgress.get(currentLesson.id);
+      if (savedProgress && savedProgress > 0) {
+        videoRef.current.currentTime = savedProgress;
+      }
+    }
+  }, [currentLesson?.id]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (progressSaveTimeout.current) {
+        clearTimeout(progressSaveTimeout.current);
+      }
+    };
+  }, []);
+
   const handleLessonClick = (subsection: Subsection) => {
+    // Save current progress before switching
+    if (currentLesson && videoRef.current) {
+      saveVideoProgress(currentLesson.id, videoRef.current.currentTime);
+    }
     setCurrentLesson(subsection);
   };
 
@@ -305,12 +422,24 @@ export default function CourseLearning() {
             <div className="lg:col-span-2 space-y-4">
               <div className="bg-background rounded-lg border overflow-hidden">
                 {currentLesson?.video_url ? (
-                  <div className="aspect-video">
-                    <iframe
+                  <div className="aspect-video bg-black">
+                    <video
+                      ref={videoRef}
+                      key={currentLesson.id}
                       src={currentLesson.video_url}
                       className="w-full h-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
+                      controls
+                      onTimeUpdate={handleTimeUpdate}
+                      onEnded={handleVideoEnded}
+                      onLoadedMetadata={() => {
+                        // Set to saved position when video loads
+                        if (videoRef.current && currentLesson) {
+                          const savedProgress = videoProgress.get(currentLesson.id);
+                          if (savedProgress && savedProgress > 0) {
+                            videoRef.current.currentTime = savedProgress;
+                          }
+                        }
+                      }}
                     />
                   </div>
                 ) : (
