@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { CloudinaryUpload } from '@/components/ui/cloudinary-upload';
 import { Loader2 } from 'lucide-react';
 
 interface Category {
@@ -124,28 +125,12 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="thumbnail">Thumbnail URL</Label>
-            <Input
-              id="thumbnail"
-              type="url"
-              placeholder="https://example.com/image.jpg"
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-            />
-            {thumbnailUrl && (
-              <div className="mt-2">
-                <img
-                  src={thumbnailUrl}
-                  alt="Thumbnail preview"
-                  className="max-w-xs rounded-lg"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          <CloudinaryUpload
+            type="image"
+            value={thumbnailUrl}
+            onChange={setThumbnailUrl}
+            label="Course Thumbnail"
+          />
 
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div>

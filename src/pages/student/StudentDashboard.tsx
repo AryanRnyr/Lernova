@@ -60,9 +60,7 @@ const StudentDashboard = () => {
               slug,
               thumbnail_url,
               total_duration,
-              instructor:profiles!courses_instructor_id_fkey (
-                full_name
-              )
+              instructor_id
             )
           `)
           .eq('user_id', user.id)
@@ -70,9 +68,35 @@ const StudentDashboard = () => {
 
         if (enrollmentError) throw enrollmentError;
 
+        // Fetch instructor names for each course
+        const enrollmentsWithInstructors = await Promise.all(
+          (enrollmentData || []).map(async (enrollment: any) => {
+            if (enrollment.course?.instructor_id) {
+              const { data: instructorData } = await supabase.rpc('get_instructor_profile', {
+                instructor_user_id: enrollment.course.instructor_id,
+              });
+              const instructorName = instructorData?.[0]?.full_name || 'Unknown Instructor';
+              return {
+                ...enrollment,
+                course: {
+                  ...enrollment.course,
+                  instructor: { full_name: instructorName }
+                }
+              };
+            }
+            return {
+              ...enrollment,
+              course: {
+                ...enrollment.course,
+                instructor: { full_name: 'Unknown Instructor' }
+              }
+            };
+          })
+        );
+
         // Fetch progress for each enrollment
         const enrichedEnrollments = await Promise.all(
-          (enrollmentData || []).map(async (enrollment: any) => {
+          enrollmentsWithInstructors.map(async (enrollment: any) => {
             // Get total lectures for this course
             const { data: sections } = await supabase
               .from('sections')
