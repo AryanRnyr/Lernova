@@ -145,48 +145,60 @@ export type Database = {
       }
       courses: {
         Row: {
+          average_rating: number | null
           category_id: string | null
           created_at: string
           description: string | null
+          difficulty_level: string | null
           id: string
           instructor_id: string
           is_free: boolean
           price: number
+          recommended_price: number | null
           slug: string
           status: Database["public"]["Enums"]["course_status"]
           thumbnail_url: string | null
           title: string
           total_duration: number | null
+          total_reviews: number | null
           updated_at: string
         }
         Insert: {
+          average_rating?: number | null
           category_id?: string | null
           created_at?: string
           description?: string | null
+          difficulty_level?: string | null
           id?: string
           instructor_id: string
           is_free?: boolean
           price?: number
+          recommended_price?: number | null
           slug: string
           status?: Database["public"]["Enums"]["course_status"]
           thumbnail_url?: string | null
           title: string
           total_duration?: number | null
+          total_reviews?: number | null
           updated_at?: string
         }
         Update: {
+          average_rating?: number | null
           category_id?: string | null
           created_at?: string
           description?: string | null
+          difficulty_level?: string | null
           id?: string
           instructor_id?: string
           is_free?: boolean
           price?: number
+          recommended_price?: number | null
           slug?: string
           status?: Database["public"]["Enums"]["course_status"]
           thumbnail_url?: string | null
           title?: string
           total_duration?: number | null
+          total_reviews?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -496,6 +508,51 @@ export type Database = {
           },
         ]
       }
+      user_activity_logs: {
+        Row: {
+          activity_type: string
+          category_id: string | null
+          course_id: string | null
+          created_at: string
+          id: string
+          search_query: string | null
+          user_id: string
+        }
+        Insert: {
+          activity_type: string
+          category_id?: string | null
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          search_query?: string | null
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          category_id?: string | null
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          search_query?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_activity_logs_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_activity_logs_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -522,6 +579,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_course_difficulty: {
+        Args: { course_uuid: string }
+        Returns: string
+      }
+      calculate_recommended_price: {
+        Args: { course_uuid: string }
+        Returns: number
+      }
+      generate_certificate_number: { Args: never; Returns: string }
+      get_course_recommendations: {
+        Args: { p_limit?: number; p_user_id: string }
+        Returns: {
+          average_rating: number
+          category_id: string
+          category_name: string
+          description: string
+          difficulty_level: string
+          id: string
+          instructor_id: string
+          is_free: boolean
+          price: number
+          recommendation_score: number
+          slug: string
+          thumbnail_url: string
+          title: string
+          total_duration: number
+        }[]
+      }
       get_instructor_profile: {
         Args: { instructor_user_id: string }
         Returns: {
@@ -537,6 +622,35 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      search_courses: {
+        Args: {
+          category_filter?: string
+          difficulty_filter?: string
+          max_price?: number
+          min_price?: number
+          min_rating?: number
+          price_type?: string
+          search_term: string
+        }
+        Returns: {
+          average_rating: number
+          category_id: string
+          category_name: string
+          description: string
+          difficulty_level: string
+          enrollment_count: number
+          id: string
+          instructor_id: string
+          is_free: boolean
+          price: number
+          relevance_score: number
+          slug: string
+          thumbnail_url: string
+          title: string
+          total_duration: number
+          total_reviews: number
+        }[]
       }
     }
     Enums: {

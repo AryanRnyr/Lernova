@@ -16,7 +16,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart } from 'lucide-react';
+import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart, GraduationCap } from 'lucide-react';
+import { CourseReviewForm } from '@/components/reviews/CourseReviewForm';
+import { useActivityLog } from '@/hooks/useActivityLog';
 
 interface Subsection {
   id: string;
@@ -47,6 +49,9 @@ interface Course {
   category: { name: string } | null;
   instructor_name: string | null;
   instructor_avatar: string | null;
+  difficulty_level: string;
+  average_rating: number;
+  total_reviews: number;
 }
 
 interface Review {
@@ -64,10 +69,12 @@ const CourseDetail = () => {
   const { addToCart, items: cartItems } = useCart();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logActivity } = useActivityLog();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [userReview, setUserReview] = useState<Review | null>(null);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [loading, setLoading] = useState(true);
