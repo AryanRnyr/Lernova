@@ -8,7 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Clock, Award, PlayCircle } from 'lucide-react';
+import { BookOpen, Clock, Award, PlayCircle, Download } from 'lucide-react';
+import { CertificateGenerator } from '@/components/certificate/CertificateGenerator';
+import { CourseRecommendations } from '@/components/recommendations/CourseRecommendations';
 
 interface EnrolledCourse {
   id: string;
@@ -30,10 +32,20 @@ interface EnrolledCourse {
   completedLectures: number;
 }
 
+interface Certificate {
+  id: string;
+  certificate_number: string;
+  issued_at: string;
+  course_title: string;
+  student_name: string;
+}
+
 const StudentDashboard = () => {
   const { user, loading: authLoading } = useAuth();
   const [enrollments, setEnrollments] = useState<EnrolledCourse[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [studentName, setStudentName] = useState<string>('Student');
   const [stats, setStats] = useState({
     totalCourses: 0,
     completedCourses: 0,
@@ -44,8 +56,19 @@ const StudentDashboard = () => {
   useEffect(() => {
     if (!user) return;
 
-    const fetchEnrollments = async () => {
+    const fetchData = async () => {
       try {
+        // Fetch student profile
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (profileData?.full_name) {
+          setStudentName(profileData.full_name);
+        }
+
         // Fetch enrollments with course info
         const { data: enrollmentData, error: enrollmentError } = await supabase
           .from('enrollments')
@@ -97,7 +120,6 @@ const StudentDashboard = () => {
         // Fetch progress for each enrollment
         const enrichedEnrollments = await Promise.all(
           enrollmentsWithInstructors.map(async (enrollment: any) => {
-            // Get total lectures for this course
             const { data: sections } = await supabase
               .from('sections')
               .select('id')
@@ -116,7 +138,6 @@ const StudentDashboard = () => {
 
               totalLectures = subsections?.length || 0;
 
-              // Get completed count
               const { data: progressData } = await supabase
                 .from('course_progress')
                 .select('id')
@@ -142,32 +163,50 @@ const StudentDashboard = () => {
 
         setEnrollments(enrichedEnrollments);
 
-        // Calculate stats
-        const completedCourses = enrichedEnrollments.filter(e => e.completed_at).length;
-        
-        // Get certificates count
-        const { data: certificates } = await supabase
+        // Fetch certificates with course names
+        const { data: certificatesData } = await supabase
           .from('certificates')
-          .select('id')
-          .eq('user_id', user.id);
+          .select(`
+            id,
+            certificate_number,
+            issued_at,
+            course:courses(title)
+          `)
+          .eq('user_id', user.id)
+          .order('issued_at', { ascending: false });
+
+        if (certificatesData) {
+          setCertificates(
+            certificatesData.map((cert: any) => ({
+              id: cert.id,
+              certificate_number: cert.certificate_number,
+              issued_at: cert.issued_at,
+              course_title: cert.course?.title || 'Unknown Course',
+              student_name: studentName,
+            }))
+          );
+        }
+
+        // Calculate stats
+        const completedCourses = enrichedEnrollments.filter(e => e.completed_at || e.progress === 100).length;
 
         setStats({
           totalCourses: enrichedEnrollments.length,
           completedCourses,
           totalHoursLearned: enrichedEnrollments.reduce((acc, e) => 
             acc + Math.round((e.course?.total_duration || 0) * (e.progress / 100) / 60), 0),
-          certificatesEarned: certificates?.length || 0,
+          certificatesEarned: certificatesData?.length || 0,
         });
 
       } catch (error) {
-        console.error('Error fetching enrollments:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchEnrollments();
-  }, [user]);
+    fetchData();
+  }, [user, studentName]);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -268,6 +307,9 @@ const StudentDashboard = () => {
             <TabsTrigger value="completed">
               Completed ({completedCourses.length})
             </TabsTrigger>
+            <TabsTrigger value="certificates">
+              Certificates ({certificates.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="in-progress">
@@ -324,7 +366,43 @@ const StudentDashboard = () => {
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="certificates">
+            {loading ? (
+              <div className="grid gap-4">
+                {[...Array(2)].map((_, i) => (
+                  <Skeleton key={i} className="h-32 w-full" />
+                ))}
+              </div>
+            ) : certificates.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Download className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No certificates yet</h3>
+                  <p className="text-muted-foreground">
+                    Complete courses to earn downloadable certificates
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {certificates.map((certificate) => (
+                  <CertificateGenerator
+                    key={certificate.id}
+                    certificate={{ ...certificate, student_name: studentName }}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
+
+        {/* Recommendations */}
+        {inProgressCourses.length < 3 && (
+          <div className="mt-12">
+            <CourseRecommendations limit={4} title="Continue Your Learning Journey" />
+          </div>
+        )}
       </div>
     </MainLayout>
   );
