@@ -153,6 +153,8 @@ export type Database = {
           id: string
           instructor_id: string
           is_free: boolean
+          last_edited_at: string | null
+          last_edited_by: string | null
           price: number
           recommended_price: number | null
           slug: string
@@ -172,6 +174,8 @@ export type Database = {
           id?: string
           instructor_id: string
           is_free?: boolean
+          last_edited_at?: string | null
+          last_edited_by?: string | null
           price?: number
           recommended_price?: number | null
           slug: string
@@ -191,6 +195,8 @@ export type Database = {
           id?: string
           instructor_id?: string
           is_free?: boolean
+          last_edited_at?: string | null
+          last_edited_by?: string | null
           price?: number
           recommended_price?: number | null
           slug?: string
@@ -588,6 +594,14 @@ export type Database = {
         Returns: number
       }
       generate_certificate_number: { Args: never; Returns: string }
+      get_all_users_with_emails: {
+        Args: never
+        Returns: {
+          email: string
+          full_name: string
+          user_id: string
+        }[]
+      }
       get_course_recommendations: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {

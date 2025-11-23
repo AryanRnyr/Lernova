@@ -29,7 +29,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Category {
@@ -40,16 +48,28 @@ interface Category {
 }
 
 interface UserWithRole {
-  id: string;
+  user_id: string;
   email: string;
   full_name: string | null;
   roles: string[];
+}
+
+interface CourseForAdmin {
+  id: string;
+  title: string;
+  slug: string;
+  status: string;
+  price: number;
+  instructor_name: string | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
 }
 
 const AdminDashboard = () => {
   const { isAdmin, loading: roleLoading } = useUserRole();
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [courses, setCourses] = useState<CourseForAdmin[]>([]);
   const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0 });
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -67,61 +87,93 @@ const AdminDashboard = () => {
   }, [isAdmin]);
 
   const fetchData = async () => {
-    // Fetch categories
-    const { data: categoriesData } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name');
+    try {
+      // Fetch categories
+      const { data: categoriesData } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
 
-    if (categoriesData) {
-      setCategories(categoriesData);
-    }
+      if (categoriesData) {
+        setCategories(categoriesData);
+      }
 
-    // Fetch users with roles
-    const { data: profilesData } = await supabase
-      .from('profiles')
-      .select('user_id, full_name');
+      // Fetch users with emails using the new function
+      const { data: usersWithEmails, error: usersError } = await supabase
+        .rpc('get_all_users_with_emails');
 
-    const { data: rolesData } = await supabase
-      .from('user_roles')
-      .select('user_id, role');
+      if (usersError) {
+        console.error('Error fetching users:', usersError);
+      }
 
-    if (profilesData && rolesData) {
-      const usersMap = new Map<string, UserWithRole>();
-      
-      profilesData.forEach((profile: any) => {
-        usersMap.set(profile.user_id, {
-          id: profile.user_id,
-          email: '', // Will be fetched separately if needed
-          full_name: profile.full_name,
-          roles: [],
+      // Fetch all roles
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      if (usersWithEmails) {
+        const usersMap = new Map<string, UserWithRole>();
+        
+        usersWithEmails.forEach((user: any) => {
+          usersMap.set(user.user_id, {
+            user_id: user.user_id,
+            email: user.email || '',
+            full_name: user.full_name,
+            roles: [],
+          });
         });
-      });
 
-      rolesData.forEach((role: any) => {
-        const user = usersMap.get(role.user_id);
-        if (user) {
-          user.roles.push(role.role);
+        if (rolesData) {
+          rolesData.forEach((role: any) => {
+            const user = usersMap.get(role.user_id);
+            if (user) {
+              user.roles.push(role.role);
+            }
+          });
         }
+
+        setUsers(Array.from(usersMap.values()));
+      }
+
+      // Fetch all courses for admin management
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('id, title, slug, status, price, instructor_id, last_edited_by, last_edited_at')
+        .order('created_at', { ascending: false });
+
+      if (coursesData) {
+        // Fetch instructor names for each course
+        const coursesWithInstructors = await Promise.all(
+          coursesData.map(async (course) => {
+            const { data: instructor } = await supabase
+              .rpc('get_instructor_profile', { instructor_user_id: course.instructor_id });
+            return {
+              ...course,
+              instructor_name: instructor?.[0]?.full_name || 'Unknown',
+            };
+          })
+        );
+        setCourses(coursesWithInstructors);
+      }
+
+      // Fetch counts
+      const { count: usersCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: coursesCount } = await supabase
+        .from('courses')
+        .select('*', { count: 'exact', head: true });
+
+      setStats({
+        users: usersCount || 0,
+        courses: coursesCount || 0,
+        categories: categoriesData?.length || 0,
       });
-
-      setUsers(Array.from(usersMap.values()));
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to fetch data' });
     }
-
-    // Fetch counts
-    const { count: usersCount } = await supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
-
-    const { count: coursesCount } = await supabase
-      .from('courses')
-      .select('*', { count: 'exact', head: true });
-
-    setStats({
-      users: usersCount || 0,
-      courses: coursesCount || 0,
-      categories: categoriesData?.length || 0,
-    });
 
     setLoading(false);
   };
@@ -229,6 +281,21 @@ const AdminDashboard = () => {
     }
   };
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'published':
+        return <Badge className="bg-green-100 text-green-800">Published</Badge>;
+      case 'draft':
+        return <Badge variant="secondary">Draft</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
   if (roleLoading) {
     return (
       <MainLayout>
@@ -263,7 +330,7 @@ const AdminDashboard = () => {
       <div className="container py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage users, categories, and platform settings</p>
+          <p className="text-muted-foreground">Manage users, categories, courses, and platform settings</p>
         </div>
 
         {/* Stats */}
@@ -301,6 +368,7 @@ const AdminDashboard = () => {
           <TabsList>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="users">Users & Roles</TabsTrigger>
+            <TabsTrigger value="courses">Courses</TabsTrigger>
           </TabsList>
 
           <TabsContent value="categories">
@@ -395,46 +463,150 @@ const AdminDashboard = () => {
                     No users found.
                   </div>
                 ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Roles</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user) => (
+                        <TableRow key={user.user_id}>
+                          <TableCell className="font-medium">
+                            {user.full_name || 'Unnamed User'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {user.email || 'No email'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1 flex-wrap">
+                              {user.roles.length === 0 ? (
+                                <Badge variant="outline">No roles</Badge>
+                              ) : (
+                                user.roles.map((role) => (
+                                  <Badge key={role} variant="secondary" className="capitalize">
+                                    {role}
+                                  </Badge>
+                                ))
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {!user.roles.includes('instructor') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAssignRole(user.user_id, 'instructor')}
+                                >
+                                  <Shield className="h-4 w-4 mr-1" />
+                                  Make Instructor
+                                </Button>
+                              )}
+                              {user.roles.includes('instructor') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveRole(user.user_id, 'instructor')}
+                                >
+                                  Remove Instructor
+                                </Button>
+                              )}
+                              {!user.roles.includes('admin') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleAssignRole(user.user_id, 'admin')}
+                                >
+                                  Make Admin
+                                </Button>
+                              )}
+                              {user.roles.includes('admin') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveRole(user.user_id, 'admin')}
+                                >
+                                  Remove Admin
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="courses">
+            <Card>
+              <CardHeader>
+                <CardTitle>All Courses</CardTitle>
+                <CardDescription>View and manage all courses on the platform</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
                   <div className="space-y-2">
-                    {users.map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex flex-col md:flex-row md:items-center justify-between p-4 border rounded-lg gap-4"
-                      >
-                        <div>
-                          <p className="font-medium">{user.full_name || 'Unnamed User'}</p>
-                          <div className="flex gap-1 mt-1">
-                            {user.roles.map((role) => (
-                              <Badge key={role} variant="secondary" className="capitalize">
-                                {role}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {!user.roles.includes('instructor') && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleAssignRole(user.id, 'instructor')}
-                            >
-                              <Shield className="h-4 w-4 mr-1" />
-                              Make Instructor
-                            </Button>
-                          )}
-                          {user.roles.includes('instructor') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveRole(user.id, 'instructor')}
-                            >
-                              Remove Instructor
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                    {[...Array(5)].map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
                     ))}
                   </div>
+                ) : courses.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No courses found.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Instructor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {courses.map((course) => (
+                        <TableRow key={course.id}>
+                          <TableCell className="font-medium">
+                            {course.title}
+                            {course.last_edited_by && (
+                              <p className="text-xs text-muted-foreground">
+                                Last edited by admin
+                              </p>
+                            )}
+                          </TableCell>
+                          <TableCell>{course.instructor_name}</TableCell>
+                          <TableCell>{getStatusBadge(course.status)}</TableCell>
+                          <TableCell>
+                            {course.price === 0 ? 'Free' : `NPR ${course.price}`}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link to={`/course/${course.slug}`}>
+                                  <Eye className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button variant="outline" size="sm" asChild>
+                                <Link to={`/instructor/courses/${course.id}/edit`}>
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Link>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </CardContent>
             </Card>

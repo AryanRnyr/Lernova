@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,9 +13,38 @@ export const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [redirecting, setRedirecting] = useState(false);
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Handle role-based redirect after login
+  useEffect(() => {
+    const handleRoleRedirect = async () => {
+      if (!user || redirecting) return;
+      
+      setRedirecting(true);
+      
+      // Fetch user roles
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id);
+      
+      const userRoles = roles?.map(r => r.role) || [];
+      
+      // Redirect based on role priority: admin > instructor > student
+      if (userRoles.includes('admin')) {
+        navigate('/admin');
+      } else if (userRoles.includes('instructor')) {
+        navigate('/instructor');
+      } else {
+        navigate('/dashboard');
+      }
+    };
+
+    handleRoleRedirect();
+  }, [user, navigate, redirecting]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,15 +58,14 @@ export const LoginForm = () => {
         title: 'Login failed',
         description: error.message,
       });
+      setLoading(false);
     } else {
       toast({
         title: 'Welcome back!',
         description: 'You have successfully logged in.',
       });
-      navigate('/');
+      // Redirect is handled by useEffect when user state updates
     }
-
-    setLoading(false);
   };
 
   return (

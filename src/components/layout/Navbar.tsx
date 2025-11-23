@@ -18,7 +18,7 @@ import { Menu, GraduationCap, User, LogOut, LayoutDashboard, BookOpen, Settings,
 
 export const Navbar = () => {
   const { user, signOut } = useAuth();
-  const { isAdmin, isInstructor } = useUserRole();
+  const { isAdmin, isInstructor, isStudent, loading: roleLoading } = useUserRole();
   const { count } = useCart();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -37,6 +37,9 @@ export const Navbar = () => {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  // Only show cart for students (not admins or instructors)
+  const showCart = user && !roleLoading && !isAdmin() && !isInstructor();
 
   const navLinks = [
     { href: '/catalog', label: 'Courses' },
@@ -68,7 +71,7 @@ export const Navbar = () => {
 
         {/* Desktop Auth Buttons */}
         <div className="hidden md:flex items-center gap-4">
-          {user && (
+          {showCart && (
             <Button variant="ghost" size="icon" asChild className="relative">
               <Link to="/cart">
                 <ShoppingCart className="h-5 w-5" />
@@ -98,7 +101,16 @@ export const Navbar = () => {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {/* Student Dashboard - only for users who are NOT instructors or admins */}
+                
+                {/* Profile link for all users */}
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+
+                {/* Student Dashboard - only for students (not instructors or admins) */}
                 {!isInstructor() && !isAdmin() && (
                   <DropdownMenuItem asChild>
                     <Link to="/dashboard" className="cursor-pointer">
@@ -107,7 +119,8 @@ export const Navbar = () => {
                     </Link>
                   </DropdownMenuItem>
                 )}
-                {/* Instructor Dashboard - only for instructors (not admins unless they're also instructors) */}
+                
+                {/* Instructor Dashboard - only for instructors */}
                 {isInstructor() && (
                   <DropdownMenuItem asChild>
                     <Link to="/instructor" className="cursor-pointer">
@@ -116,6 +129,7 @@ export const Navbar = () => {
                     </Link>
                   </DropdownMenuItem>
                 )}
+                
                 {/* Admin Panel - only for admins */}
                 {isAdmin() && (
                   <DropdownMenuItem asChild>
@@ -125,6 +139,7 @@ export const Navbar = () => {
                     </Link>
                   </DropdownMenuItem>
                 )}
+                
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -166,10 +181,18 @@ export const Navbar = () => {
               <hr className="my-2" />
               {user ? (
                 <>
+                  <Link to="/profile" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                    Profile
+                  </Link>
                   {!isInstructor() && !isAdmin() && (
-                    <Link to="/dashboard" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
-                      My Learning
-                    </Link>
+                    <>
+                      <Link to="/dashboard" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                        My Learning
+                      </Link>
+                      <Link to="/cart" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                        Cart {count > 0 && `(${count})`}
+                      </Link>
+                    </>
                   )}
                   {isInstructor() && (
                     <Link to="/instructor" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
