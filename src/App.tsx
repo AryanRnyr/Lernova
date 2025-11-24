@@ -23,6 +23,7 @@ import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailure from "./pages/PaymentFailure";
 import NotFound from "./pages/NotFound";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/course/:slug" element={<CourseDetail />} />
             <Route path="/learn/:slug" element={<CourseLearning />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/payment/success" element={<PaymentSuccess />} />

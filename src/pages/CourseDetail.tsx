@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
 import { useCart } from '@/hooks/useCart';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -66,6 +67,7 @@ interface Review {
 const CourseDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
+  const { isAdmin, isInstructor } = useUserRole();
   const { addToCart, items: cartItems } = useCart();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -82,11 +84,15 @@ const CourseDetail = () => {
   const [addingToCart, setAddingToCart] = useState(false);
 
   const isInCart = course ? cartItems.some(item => item.course_id === course.id) : false;
+  
+  // Don't show purchase options for admins/instructors
+  const canPurchase = !isAdmin() && !isInstructor();
+
   useEffect(() => {
     const fetchCourse = async () => {
       if (!slug) return;
 
-      // Fetch course
+      // Fetch course with difficulty and rating info
       const { data: courseData, error } = await supabase
         .from('courses')
         .select(`
@@ -100,6 +106,9 @@ const CourseDetail = () => {
           total_duration,
           status,
           instructor_id,
+          difficulty_level,
+          average_rating,
+          total_reviews,
           category:categories(name)
         `)
         .eq('slug', slug)
@@ -124,7 +133,15 @@ const CourseDetail = () => {
         ...courseData,
         instructor_name: instructor?.full_name || null,
         instructor_avatar: instructor?.avatar_url || null,
+        difficulty_level: courseData.difficulty_level || 'beginner',
+        average_rating: courseData.average_rating || 0,
+        total_reviews: courseData.total_reviews || 0,
       } as Course);
+
+      // Log course view activity
+      if (user) {
+        logActivity('course_view', courseData.id);
+      }
 
       // Fetch sections with subsections
       const { data: sectionsData } = await supabase
@@ -180,6 +197,14 @@ const CourseDetail = () => {
           })
         );
         setReviews(reviewsWithNames as Review[]);
+        
+        // Check if current user has reviewed
+        if (user) {
+          const existingReview = reviewsWithNames.find(r => r.user_id === user.id);
+          if (existingReview) {
+            setUserReview(existingReview as Review);
+          }
+        }
       }
 
       // Check enrollment
@@ -264,6 +289,11 @@ const CourseDetail = () => {
     setAddingToCart(false);
   };
 
+  const handleReviewSubmitted = () => {
+    // Refresh course data to get updated rating
+    window.location.reload();
+  };
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('ne-NP', {
       style: 'currency',
@@ -283,10 +313,17 @@ const CourseDetail = () => {
     return sections.reduce((acc, section) => acc + section.subsections.length, 0);
   };
 
-  const getAverageRating = () => {
-    if (reviews.length === 0) return 0;
-    const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
-    return (sum / reviews.length).toFixed(1);
+  const getDifficultyColor = (level: string) => {
+    switch (level?.toLowerCase()) {
+      case 'beginner':
+        return 'bg-green-100 text-green-800';
+      case 'intermediate':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'advanced':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
   };
 
   if (loading) {
@@ -328,17 +365,22 @@ const CourseDetail = () => {
         <div className="container">
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
-              {course.category && (
-                <Badge variant="secondary">{course.category.name}</Badge>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {course.category && (
+                  <Badge variant="secondary">{course.category.name}</Badge>
+                )}
+                <Badge className={getDifficultyColor(course.difficulty_level)}>
+                  {course.difficulty_level || 'Beginner'}
+                </Badge>
+              </div>
               <h1 className="text-3xl md:text-4xl font-bold">{course.title}</h1>
               <p className="text-lg text-muted-foreground">{course.description}</p>
               
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <div className="flex items-center gap-1">
                   <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  <span className="font-medium">{getAverageRating()}</span>
-                  <span className="text-muted-foreground">({reviews.length} reviews)</span>
+                  <span className="font-medium">{(course.average_rating || 0).toFixed(1)}</span>
+                  <span className="text-muted-foreground">({course.total_reviews || 0} reviews)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Users className="h-4 w-4 text-muted-foreground" />
@@ -390,43 +432,49 @@ const CourseDetail = () => {
                         Continue Learning
                       </Link>
                     </Button>
-                  ) : course.is_free ? (
-                    <Button
-                      className="w-full"
-                      size="lg"
-                      onClick={handleEnroll}
-                      disabled={enrolling}
-                    >
-                      Enroll Now - Free
-                    </Button>
-                  ) : isInCart ? (
-                    <Button className="w-full" size="lg" asChild>
-                      <Link to="/cart">
-                        <ShoppingCart className="mr-2 h-5 w-5" />
-                        Go to Cart
-                      </Link>
-                    </Button>
-                  ) : (
-                    <div className="space-y-2">
+                  ) : canPurchase ? (
+                    course.is_free ? (
                       <Button
                         className="w-full"
                         size="lg"
                         onClick={handleEnroll}
                         disabled={enrolling}
                       >
-                        Buy Now
+                        Enroll Now - Free
                       </Button>
-                      <Button
-                        className="w-full"
-                        size="lg"
-                        variant="outline"
-                        onClick={handleAddToCart}
-                        disabled={addingToCart}
-                      >
-                        <ShoppingCart className="mr-2 h-5 w-5" />
-                        Add to Cart
+                    ) : isInCart ? (
+                      <Button className="w-full" size="lg" asChild>
+                        <Link to="/cart">
+                          <ShoppingCart className="mr-2 h-5 w-5" />
+                          Go to Cart
+                        </Link>
                       </Button>
-                    </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Button
+                          className="w-full"
+                          size="lg"
+                          onClick={handleEnroll}
+                          disabled={enrolling}
+                        >
+                          Buy Now
+                        </Button>
+                        <Button
+                          className="w-full"
+                          size="lg"
+                          variant="outline"
+                          onClick={handleAddToCart}
+                          disabled={addingToCart}
+                        >
+                          <ShoppingCart className="mr-2 h-5 w-5" />
+                          Add to Cart
+                        </Button>
+                      </div>
+                    )
+                  ) : (
+                    <p className="text-center text-muted-foreground text-sm">
+                      You are viewing as {isAdmin() ? 'an admin' : 'an instructor'}
+                    </p>
                   )}
 
                   <Separator />
@@ -514,12 +562,31 @@ const CourseDetail = () => {
         </div>
       </section>
 
-      {/* Reviews Section */}
-      {reviews.length > 0 && (
-        <section className="py-8 md:py-12 bg-card">
+      {/* Review Form for Enrolled Students */}
+      {isEnrolled && user && !userReview && (
+        <section className="py-8 md:py-12 bg-muted/30">
           <div className="container">
             <div className="lg:w-2/3">
-              <h2 className="text-2xl font-bold mb-6">Student Reviews</h2>
+              <h2 className="text-2xl font-bold mb-6">Write a Review</h2>
+              <CourseReviewForm
+                courseId={course.id}
+                userId={user.id}
+                onReviewSubmitted={handleReviewSubmitted}
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Reviews Section */}
+      <section className="py-8 md:py-12 bg-card">
+        <div className="container">
+          <div className="lg:w-2/3">
+            <h2 className="text-2xl font-bold mb-6">Student Reviews</h2>
+            
+            {reviews.length === 0 ? (
+              <p className="text-muted-foreground">No reviews yet. Be the first to review this course!</p>
+            ) : (
               <div className="space-y-4">
                 {reviews.map((review) => (
                   <Card key={review.id}>
@@ -542,6 +609,9 @@ const CourseDetail = () => {
                                 />
                               ))}
                             </div>
+                            {review.user_id === user?.id && (
+                              <Badge variant="outline" className="text-xs">Your Review</Badge>
+                            )}
                           </div>
                           <p className="text-muted-foreground">{review.comment}</p>
                         </div>
@@ -550,10 +620,10 @@ const CourseDetail = () => {
                   </Card>
                 ))}
               </div>
-            </div>
+            )}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </MainLayout>
   );
 };

@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-type ActivityType = 'view' | 'search' | 'enroll' | 'complete';
+type ActivityType = 'view' | 'search' | 'enroll' | 'complete' | 'course_view';
 
 export function useActivityLog() {
   const { user } = useAuth();
