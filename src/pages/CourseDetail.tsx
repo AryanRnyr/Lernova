@@ -140,7 +140,7 @@ const CourseDetail = () => {
 
       // Log course view activity
       if (user) {
-        logActivity('course_view', courseData.id);
+        logActivity('course_view', { courseId: courseData.id });
       }
 
       // Fetch sections with subsections
