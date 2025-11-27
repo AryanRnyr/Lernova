@@ -361,7 +361,13 @@ const StudentDashboard = () => {
             ) : (
               <div className="grid gap-4">
                 {completedCourses.map((enrollment) => (
-                  <CourseCard key={enrollment.id} enrollment={enrollment} formatDuration={formatDuration} completed />
+                  <CourseCard 
+                    key={enrollment.id} 
+                    enrollment={enrollment} 
+                    formatDuration={formatDuration} 
+                    completed 
+                    studentName={studentName}
+                  />
                 ))}
               </div>
             )}
@@ -412,9 +418,44 @@ interface CourseCardProps {
   enrollment: EnrolledCourse;
   formatDuration: (minutes: number) => string;
   completed?: boolean;
+  studentName?: string;
+  onCertificateGenerated?: () => void;
 }
 
-const CourseCard = ({ enrollment, formatDuration, completed }: CourseCardProps) => {
+const CourseCard = ({ enrollment, formatDuration, completed, studentName, onCertificateGenerated }: CourseCardProps) => {
+  const [certificate, setCertificate] = useState<Certificate | null>(null);
+  const [checkingCert, setCheckingCert] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (completed && user) {
+      checkForCertificate();
+    }
+  }, [completed, user]);
+
+  const checkForCertificate = async () => {
+    if (!user) return;
+    setCheckingCert(true);
+    
+    const { data } = await supabase
+      .from('certificates')
+      .select('id, certificate_number, issued_at')
+      .eq('user_id', user.id)
+      .eq('course_id', enrollment.course_id)
+      .single();
+    
+    if (data) {
+      setCertificate({
+        id: data.id,
+        certificate_number: data.certificate_number,
+        issued_at: data.issued_at,
+        course_title: enrollment.course?.title || 'Unknown Course',
+        student_name: studentName || 'Student',
+      });
+    }
+    setCheckingCert(false);
+  };
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -454,13 +495,16 @@ const CourseCard = ({ enrollment, formatDuration, completed }: CourseCardProps) 
               <Progress value={enrollment.progress} className="h-2" />
             </div>
           </div>
-          <div className="p-4 flex items-center">
+          <div className="p-4 flex items-center gap-2">
             <Button asChild variant={completed ? "outline" : "default"}>
               <Link to={`/learn/${enrollment.course?.slug}`}>
                 <PlayCircle className="mr-2 h-4 w-4" />
                 {completed ? 'Review' : 'Continue'}
               </Link>
             </Button>
+            {completed && certificate && (
+              <CertificateGenerator certificate={certificate} />
+            )}
           </div>
         </div>
       </CardContent>
