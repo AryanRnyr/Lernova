@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, GraduationCap, User, LogOut, LayoutDashboard, BookOpen, Settings, ShoppingCart } from 'lucide-react';
+import { Menu, GraduationCap, User, LogOut, LayoutDashboard, BookOpen, Settings, ShoppingCart, Star } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export const Navbar = () => {
   const { user, signOut } = useAuth();
@@ -70,7 +71,8 @@ export const Navbar = () => {
         </nav>
 
         {/* Desktop Auth Buttons */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-2">
+          {user && <NotificationBell />}
           {showCart && (
             <Button variant="ghost" size="icon" asChild className="relative">
               <Link to="/cart">
@@ -110,14 +112,22 @@ export const Navbar = () => {
                   </Link>
                 </DropdownMenuItem>
 
-                {/* Student Dashboard - only for students (not instructors or admins) */}
+                {/* Student Dashboard and Reviews - only for students (not instructors or admins) */}
                 {!isInstructor() && !isAdmin() && (
-                  <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="cursor-pointer">
-                      <LayoutDashboard className="mr-2 h-4 w-4" />
-                      My Learning
-                    </Link>
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link to="/dashboard" className="cursor-pointer">
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        My Learning
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/my-reviews" className="cursor-pointer">
+                        <Star className="mr-2 h-4 w-4" />
+                        My Reviews
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
                 )}
                 
                 {/* Instructor Dashboard - only for instructors */}
@@ -188,6 +198,9 @@ export const Navbar = () => {
                     <>
                       <Link to="/dashboard" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
                         My Learning
+                      </Link>
+                      <Link to="/my-reviews" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
+                        My Reviews
                       </Link>
                       <Link to="/cart" onClick={() => setMobileOpen(false)} className="text-lg font-medium">
                         Cart {count > 0 && `(${count})`}

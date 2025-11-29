@@ -255,6 +255,7 @@ export type Database = {
           data: Json | null
           id: string
           message: string
+          notification_type: string | null
           read: boolean
           title: string
           type: string
@@ -265,6 +266,7 @@ export type Database = {
           data?: Json | null
           id?: string
           message: string
+          notification_type?: string | null
           read?: boolean
           title: string
           type: string
@@ -275,6 +277,7 @@ export type Database = {
           data?: Json | null
           id?: string
           message?: string
+          notification_type?: string | null
           read?: boolean
           title?: string
           type?: string
@@ -364,8 +367,10 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
           id: string
+          phone_number: string | null
           updated_at: string
           user_id: string
         }
@@ -373,8 +378,10 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
           id?: string
+          phone_number?: string | null
           updated_at?: string
           user_id: string
         }
@@ -382,8 +389,10 @@ export type Database = {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
           id?: string
+          phone_number?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -703,6 +712,12 @@ export type Database = {
     Enums: {
       app_role: "student" | "instructor" | "admin"
       course_status: "draft" | "pending" | "published" | "rejected"
+      notification_type:
+        | "review"
+        | "admin_edit"
+        | "enrollment"
+        | "certificate"
+        | "system"
       order_status: "pending" | "completed" | "failed" | "refunded"
       payout_status: "pending" | "approved" | "rejected" | "completed"
     }
@@ -834,6 +849,13 @@ export const Constants = {
     Enums: {
       app_role: ["student", "instructor", "admin"],
       course_status: ["draft", "pending", "published", "rejected"],
+      notification_type: [
+        "review",
+        "admin_edit",
+        "enrollment",
+        "certificate",
+        "system",
+      ],
       order_status: ["pending", "completed", "failed", "refunded"],
       payout_status: ["pending", "approved", "rejected", "completed"],
     },

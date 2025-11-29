@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, User, Save } from 'lucide-react';
+import { Loader2, User, Save, Phone, Calendar } from 'lucide-react';
+import { ProfileImageUpload } from '@/components/profile/ProfileImageUpload';
+import { ChangePasswordForm } from '@/components/profile/ChangePasswordForm';
 
 interface Profile {
   id: string;
@@ -19,6 +20,8 @@ interface Profile {
   full_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  phone_number: string | null;
+  date_of_birth: string | null;
 }
 
 const Profile = () => {
@@ -33,6 +36,8 @@ const Profile = () => {
   const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -63,6 +68,8 @@ const Profile = () => {
       setFullName(data.full_name || '');
       setBio(data.bio || '');
       setAvatarUrl(data.avatar_url || '');
+      setPhoneNumber(data.phone_number || '');
+      setDateOfBirth(data.date_of_birth || '');
     }
     
     setLoading(false);
@@ -79,6 +86,8 @@ const Profile = () => {
         full_name: fullName,
         bio: bio,
         avatar_url: avatarUrl || null,
+        phone_number: phoneNumber || null,
+        date_of_birth: dateOfBirth || null,
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', user.id);
@@ -99,16 +108,6 @@ const Profile = () => {
     setSaving(false);
   };
 
-  const getInitials = (name: string | null) => {
-    if (!name) return 'U';
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   if (authLoading || loading) {
     return (
       <MainLayout>
@@ -126,8 +125,8 @@ const Profile = () => {
 
   return (
     <MainLayout>
-      <div className="container py-8 max-w-2xl">
-        <h1 className="text-3xl font-bold mb-8">My Profile</h1>
+      <div className="container py-8 max-w-2xl space-y-6">
+        <h1 className="text-3xl font-bold">My Profile</h1>
 
         <Card>
           <CardHeader>
@@ -136,26 +135,16 @@ const Profile = () => {
               Profile Settings
             </CardTitle>
             <CardDescription>
-              Update your personal information and avatar
+              Update your personal information and profile picture
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Avatar Preview */}
-            <div className="flex items-center gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={avatarUrl} alt={fullName} />
-                <AvatarFallback className="text-lg">{getInitials(fullName)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-2">
-                <Label htmlFor="avatar">Avatar URL</Label>
-                <Input
-                  id="avatar"
-                  placeholder="https://example.com/avatar.jpg"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                />
-              </div>
-            </div>
+            {/* Profile Image Upload */}
+            <ProfileImageUpload
+              currentImageUrl={avatarUrl}
+              fullName={fullName}
+              onImageUploaded={setAvatarUrl}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -176,6 +165,35 @@ const Profile = () => {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="+977 9800000000"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dob" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date of Birth
+                </Label>
+                <Input
+                  id="dob"
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -199,6 +217,9 @@ const Profile = () => {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Change Password Section */}
+        <ChangePasswordForm />
       </div>
     </MainLayout>
   );
