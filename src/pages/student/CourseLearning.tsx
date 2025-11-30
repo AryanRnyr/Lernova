@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,7 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText } from 'lucide-react';
+import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText, Loader2 } from 'lucide-react';
+
+// Lazy load ReactPlayer for better performance
+const ReactPlayer = lazy(() => import('react-player'));
 
 interface Subsection {
   id: string;
@@ -56,7 +59,11 @@ export default function CourseLearning() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [markingComplete, setMarkingComplete] = useState(false);
   const [instructorName, setInstructorName] = useState<string>('Instructor');
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [played, setPlayed] = useState(0);
+  const [duration, setDuration] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const playerRef = useRef<any>(null);
   const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -231,12 +238,13 @@ export default function CourseLearning() {
     }
   }, [user, completedLessons]);
 
-  // Handle video time update (debounced save every 5 seconds)
-  const handleTimeUpdate = useCallback((e: React.SyntheticEvent<HTMLVideoElement>) => {
-    const video = e.currentTarget;
-    const currentTime = video.currentTime;
-    
+  // Handle video progress update (debounced save every 5 seconds)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleProgress = useCallback((state: any) => {
     if (!currentLesson) return;
+
+    const currentTime = state.playedSeconds;
+    setPlayed(currentTime);
 
     // Update local state
     setVideoProgress(prev => new Map(prev).set(currentLesson.id, currentTime));
@@ -258,15 +266,16 @@ export default function CourseLearning() {
     }
   }, [currentLesson, completedLessons]);
 
-  // Set video to saved position when lesson changes
-  useEffect(() => {
-    if (videoRef.current && currentLesson) {
+  // Get saved progress for seeking
+  const getInitialSeekTime = useCallback(() => {
+    if (currentLesson) {
       const savedProgress = videoProgress.get(currentLesson.id);
       if (savedProgress && savedProgress > 0) {
-        videoRef.current.currentTime = savedProgress;
+        return savedProgress;
       }
     }
-  }, [currentLesson?.id]);
+    return 0;
+  }, [currentLesson, videoProgress]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -279,10 +288,12 @@ export default function CourseLearning() {
 
   const handleLessonClick = (subsection: Subsection) => {
     // Save current progress before switching
-    if (currentLesson && videoRef.current) {
-      saveVideoProgress(currentLesson.id, videoRef.current.currentTime);
+    if (currentLesson && playerRef.current) {
+      saveVideoProgress(currentLesson.id, playerRef.current.currentTime || 0);
     }
     setCurrentLesson(subsection);
+    setPlaying(false);
+    setPlayed(0);
   };
 
   const markLessonComplete = async () => {
@@ -354,8 +365,14 @@ export default function CourseLearning() {
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '0:00';
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimestamp = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getTotalLessons = () => {
@@ -422,25 +439,44 @@ export default function CourseLearning() {
             <div className="lg:col-span-2 space-y-4">
               <div className="bg-background rounded-lg border overflow-hidden">
                 {currentLesson?.video_url ? (
-                  <div className="aspect-video bg-black">
-                    <video
-                      ref={videoRef}
-                      key={currentLesson.id}
-                      src={currentLesson.video_url}
-                      className="w-full h-full"
-                      controls
-                      onTimeUpdate={handleTimeUpdate}
-                      onEnded={handleVideoEnded}
-                      onLoadedMetadata={() => {
-                        // Set to saved position when video loads
-                        if (videoRef.current && currentLesson) {
-                          const savedProgress = videoProgress.get(currentLesson.id);
-                          if (savedProgress && savedProgress > 0) {
-                            videoRef.current.currentTime = savedProgress;
+                  <div className="aspect-video bg-black relative">
+                    <Suspense fallback={
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    }>
+                      <ReactPlayer
+                        ref={playerRef}
+                        src={currentLesson.video_url}
+                        width="100%"
+                        height="100%"
+                        playing={playing}
+                        controls
+                        onPlay={() => setPlaying(true)}
+                        onPause={() => setPlaying(false)}
+                        onTimeUpdate={(e: React.SyntheticEvent<HTMLVideoElement>) => {
+                          const video = e.currentTarget;
+                          handleProgress({ playedSeconds: video.currentTime });
+                        }}
+                        onDurationChange={(e: React.SyntheticEvent<HTMLVideoElement>) => {
+                          setDuration(e.currentTarget.duration);
+                        }}
+                        onEnded={handleVideoEnded}
+                        onReady={() => {
+                          // Seek to saved position
+                          const seekTime = getInitialSeekTime();
+                          if (seekTime > 0 && playerRef.current) {
+                            playerRef.current.currentTime = seekTime;
                           }
-                        }
-                      }}
-                    />
+                        }}
+                      />
+                    </Suspense>
+                    {/* Resume timestamp indicator */}
+                    {videoProgress.get(currentLesson.id) && videoProgress.get(currentLesson.id)! > 0 && played === 0 && (
+                      <div className="absolute bottom-16 left-4 bg-background/90 text-foreground px-3 py-1 rounded-md text-sm font-medium">
+                        Resume from {formatTimestamp(videoProgress.get(currentLesson.id)!)}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="aspect-video bg-muted flex items-center justify-center">

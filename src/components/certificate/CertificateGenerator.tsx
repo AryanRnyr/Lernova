@@ -56,10 +56,30 @@ export function CertificateGenerator({ certificate }: CertificateGeneratorProps)
       doc.triangle(10, pageHeight - 10, 10 + cornerSize, pageHeight - 10, 10, pageHeight - 10 - cornerSize, 'F');
       doc.triangle(pageWidth - 10, pageHeight - 10, pageWidth - 10 - cornerSize, pageHeight - 10, pageWidth - 10, pageHeight - 10 - cornerSize, 'F');
 
-      // Certificate icon placeholder (award symbol)
-      doc.setFontSize(40);
+      // Draw Lernova Logo (Graduation Cap + Text)
+      const logoX = pageWidth / 2;
+      const logoY = 35;
+      
+      // Draw graduation cap icon using shapes
+      doc.setFillColor(99, 102, 241);
+      // Cap top (diamond/rhombus shape)
+      doc.triangle(logoX - 12, logoY - 5, logoX, logoY - 12, logoX + 12, logoY - 5, 'F');
+      doc.triangle(logoX - 12, logoY - 5, logoX, logoY + 2, logoX + 12, logoY - 5, 'F');
+      // Cap base
+      doc.setFillColor(79, 82, 221);
+      doc.rect(logoX - 8, logoY, 16, 4, 'F');
+      // Tassel
+      doc.setDrawColor(99, 102, 241);
+      doc.setLineWidth(1);
+      doc.line(logoX + 10, logoY - 3, logoX + 15, logoY + 8);
+      doc.setFillColor(99, 102, 241);
+      doc.circle(logoX + 15, logoY + 10, 2, 'F');
+      
+      // Lernova text under cap
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
       doc.setTextColor(99, 102, 241);
-      doc.text('🎓', pageWidth / 2 - 10, 40);
+      doc.text('Lernova', logoX, logoY + 18, { align: 'center' });
 
       // Title
       doc.setFont('helvetica', 'bold');
