@@ -59,6 +59,7 @@ export const CurriculumEditor = ({ courseId }: CurriculumEditorProps) => {
   const [lectureTitle, setLectureTitle] = useState('');
   const [lectureVideoUrl, setLectureVideoUrl] = useState('');
   const [lectureDuration, setLectureDuration] = useState('');
+  const [detectingDuration, setDetectingDuration] = useState(false);
   const [lectureIsPreview, setLectureIsPreview] = useState(false);
 
   useEffect(() => {
@@ -187,6 +188,7 @@ export const CurriculumEditor = ({ courseId }: CurriculumEditorProps) => {
       setLectureDuration('');
       setLectureIsPreview(false);
     }
+    setDetectingDuration(false);
     setLectureDialogOpen(true);
   };
 
@@ -423,18 +425,39 @@ export const CurriculumEditor = ({ courseId }: CurriculumEditorProps) => {
             <CloudinaryUpload
               type="video"
               value={lectureVideoUrl}
-              onChange={setLectureVideoUrl}
+              onChange={(url) => {
+                setLectureVideoUrl(url);
+                // Auto-detect video duration
+                if (url) {
+                  setDetectingDuration(true);
+                  const video = document.createElement('video');
+                  video.src = url;
+                  video.preload = 'metadata';
+                  video.onloadedmetadata = () => {
+                    const duration = Math.round(video.duration);
+                    setLectureDuration(duration.toString());
+                    setDetectingDuration(false);
+                  };
+                  video.onerror = () => {
+                    setDetectingDuration(false);
+                  };
+                }
+              }}
               label="Lecture Video"
             />
             <div className="space-y-2">
-              <Label htmlFor="lecture-duration">Duration (seconds)</Label>
+              <Label htmlFor="lecture-duration">
+                Duration (seconds) 
+                {detectingDuration && <span className="text-muted-foreground ml-2 text-xs">Detecting...</span>}
+              </Label>
               <Input
                 id="lecture-duration"
                 type="number"
                 min="0"
-                placeholder="300"
+                placeholder="Auto-detected from video"
                 value={lectureDuration}
                 onChange={(e) => setLectureDuration(e.target.value)}
+                disabled={detectingDuration}
               />
             </div>
             <div className="flex items-center justify-between">
