@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Plyr } from 'plyr-react';
+import 'plyr-react/plyr.css';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -8,10 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText, Loader2 } from 'lucide-react';
-
-// Lazy load ReactPlayer for better performance
-const ReactPlayer = lazy(() => import('react-player'));
+import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText } from 'lucide-react';
 
 interface Subsection {
   id: string;
@@ -59,11 +58,11 @@ export default function CourseLearning() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [markingComplete, setMarkingComplete] = useState(false);
   const [instructorName, setInstructorName] = useState<string>('Instructor');
-  const [playing, setPlaying] = useState(false);
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const playerRef = useRef<any>(null);
+  const plyrRef = useRef<any>(null);
   const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -277,6 +276,35 @@ export default function CourseLearning() {
     return 0;
   }, [currentLesson, videoProgress]);
 
+  // Wire up player events (timeupdate, ended, resume)
+  useEffect(() => {
+    const plyr = plyrRef.current?.plyr;
+    if (!plyr || !currentLesson?.video_url) return;
+
+    const handleTimeUpdate = () => {
+      const currentTime = Number(plyr.currentTime || 0);
+      handleProgress({ playedSeconds: currentTime });
+    };
+
+    const handleReady = () => {
+      setDuration(Number(plyr.duration || 0));
+      const seekTime = getInitialSeekTime();
+      if (seekTime > 0) {
+        plyr.currentTime = seekTime;
+      }
+    };
+
+    plyr.on('timeupdate', handleTimeUpdate);
+    plyr.on('ended', handleVideoEnded);
+    plyr.on('ready', handleReady);
+
+    return () => {
+      plyr.off('timeupdate', handleTimeUpdate);
+      plyr.off('ended', handleVideoEnded);
+      plyr.off('ready', handleReady);
+    };
+  }, [currentLesson?.id, currentLesson?.video_url, getInitialSeekTime, handleProgress, handleVideoEnded]);
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -288,11 +316,11 @@ export default function CourseLearning() {
 
   const handleLessonClick = (subsection: Subsection) => {
     // Save current progress before switching
-    if (currentLesson && playerRef.current) {
-      saveVideoProgress(currentLesson.id, playerRef.current.currentTime || 0);
+    if (currentLesson && plyrRef.current?.plyr) {
+      const currentTime = Number(plyrRef.current.plyr.currentTime || 0);
+      saveVideoProgress(currentLesson.id, currentTime);
     }
     setCurrentLesson(subsection);
-    setPlaying(false);
     setPlayed(0);
   };
 
@@ -440,37 +468,30 @@ export default function CourseLearning() {
               <div className="bg-background rounded-lg border overflow-hidden">
                 {currentLesson?.video_url ? (
                   <div className="aspect-video bg-black relative">
-                    <Suspense fallback={
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      </div>
-                    }>
-                      <ReactPlayer
-                        ref={playerRef}
-                        src={currentLesson.video_url}
-                        width="100%"
-                        height="100%"
-                        playing={playing}
-                        controls
-                        onPlay={() => setPlaying(true)}
-                        onPause={() => setPlaying(false)}
-                        onTimeUpdate={(e: React.SyntheticEvent<HTMLVideoElement>) => {
-                          const video = e.currentTarget;
-                          handleProgress({ playedSeconds: video.currentTime });
-                        }}
-                        onDurationChange={(e: React.SyntheticEvent<HTMLVideoElement>) => {
-                          setDuration(e.currentTarget.duration);
-                        }}
-                        onEnded={handleVideoEnded}
-                        onReady={() => {
-                          // Seek to saved position
-                          const seekTime = getInitialSeekTime();
-                          if (seekTime > 0 && playerRef.current) {
-                            playerRef.current.currentTime = seekTime;
-                          }
-                        }}
-                      />
-                    </Suspense>
+                    <Plyr
+                      ref={plyrRef}
+                      source={{
+                        type: 'video',
+                        sources: [
+                          {
+                            src: currentLesson.video_url,
+                          },
+                        ],
+                      }}
+                      options={{
+                        controls: [
+                          'play-large',
+                          'play',
+                          'progress',
+                          'current-time',
+                          'duration',
+                          'mute',
+                          'volume',
+                          'settings',
+                          'fullscreen',
+                        ],
+                      }}
+                    />
                     {/* Resume timestamp indicator */}
                     {videoProgress.get(currentLesson.id) && videoProgress.get(currentLesson.id)! > 0 && played === 0 && (
                       <div className="absolute bottom-16 left-4 bg-background/90 text-foreground px-3 py-1 rounded-md text-sm font-medium">
