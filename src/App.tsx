@@ -19,6 +19,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import CourseLearning from "./pages/student/CourseLearning";
 import MyReviews from "./pages/student/MyReviews";
+import ReviewCourse from "./pages/student/ReviewCourse";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -44,13 +45,13 @@ const App = () => (
             <Route path="/contact" element={<Contact />} />
             <Route path="/catalog" element={<Catalog />} />
             <Route path="/course/:slug" element={<CourseDetail />} />
+            <Route path="/course/:slug/review" element={<ReviewCourse />} />
             <Route path="/learn/:slug" element={<CourseLearning />} />
             <Route path="/dashboard" element={<StudentDashboard />} />
             <Route path="/my-reviews" element={<MyReviews />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
-            <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/failure" element={<PaymentFailure />} />
             <Route path="/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/courses/new" element={<CreateCourse />} />

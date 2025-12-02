@@ -17,8 +17,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart, GraduationCap } from 'lucide-react';
-import { CourseReviewForm } from '@/components/reviews/CourseReviewForm';
+import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart, GraduationCap, MessageSquarePlus } from 'lucide-react';
 import { useActivityLog } from '@/hooks/useActivityLog';
 
 interface Subsection {
@@ -562,17 +561,21 @@ const CourseDetail = () => {
         </div>
       </section>
 
-      {/* Review Form for Enrolled Students */}
+      {/* Review CTA for Enrolled Students */}
       {isEnrolled && user && !userReview && (
         <section className="py-8 md:py-12 bg-muted/30">
           <div className="container">
             <div className="lg:w-2/3">
               <h2 className="text-2xl font-bold mb-6">Write a Review</h2>
-              <CourseReviewForm
-                courseId={course.id}
-                userId={user.id}
-                onReviewSubmitted={handleReviewSubmitted}
-              />
+              <Button asChild>
+                <Link to={`/course/${course.slug}/review`}>
+                  <MessageSquarePlus className="mr-2 h-4 w-4" />
+                  Review this course
+                </Link>
+              </Button>
+              <p className="text-sm text-muted-foreground mt-2">
+                Reviews are submitted from the review page.
+              </p>
             </div>
           </div>
         </section>
