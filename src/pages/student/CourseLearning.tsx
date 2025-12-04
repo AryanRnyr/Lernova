@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plyr } from 'plyr-react';
+import { usePlyr, PlyrProps, APITypes } from 'plyr-react';
 import 'plyr-react/plyr.css';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,6 +11,47 @@ import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText } from 'lucide-react';
+
+// Custom Plyr player component using usePlyr hook
+interface PlyrPlayerProps {
+  src: string;
+  onVideoRef?: (el: HTMLVideoElement | null) => void;
+}
+
+const PlyrPlayer = ({ src, onVideoRef }: PlyrPlayerProps) => {
+  const apiRef = useRef<APITypes | null>(null);
+
+  const options: PlyrProps['options'] = {
+    controls: [
+      'play-large',
+      'play',
+      'progress',
+      'current-time',
+      'duration',
+      'mute',
+      'volume',
+      'settings',
+      'fullscreen',
+    ],
+  };
+
+  const source: PlyrProps['source'] = {
+    type: 'video',
+    sources: [{ src }],
+  };
+
+  const rpiRef = usePlyr(apiRef, { options, source });
+
+  return (
+    <video
+      ref={(el) => {
+        (rpiRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+        onVideoRef?.(el);
+      }}
+      className="w-full h-full"
+    />
+  );
+};
 
 interface Subsection {
   id: string;
@@ -61,8 +102,7 @@ export default function CourseLearning() {
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plyrRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -276,32 +316,41 @@ export default function CourseLearning() {
     return 0;
   }, [currentLesson, videoProgress]);
 
-  // Wire up player events (timeupdate, ended, resume)
+  // Wire up player events (timeupdate, ended, resume) via native video element
   useEffect(() => {
-    const plyr = plyrRef.current?.plyr;
-    if (!plyr || !currentLesson?.video_url) return;
+    const video = videoRef.current;
+    if (!video || !currentLesson?.video_url) return;
 
     const handleTimeUpdate = () => {
-      const currentTime = Number(plyr.currentTime || 0);
+      const currentTime = video.currentTime || 0;
       handleProgress({ playedSeconds: currentTime });
     };
 
-    const handleReady = () => {
-      setDuration(Number(plyr.duration || 0));
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration || 0);
       const seekTime = getInitialSeekTime();
       if (seekTime > 0) {
-        plyr.currentTime = seekTime;
+        video.currentTime = seekTime;
       }
     };
 
-    plyr.on('timeupdate', handleTimeUpdate);
-    plyr.on('ended', handleVideoEnded);
-    plyr.on('ready', handleReady);
+    const handleEnded = () => {
+      handleVideoEnded();
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('ended', handleEnded);
+
+    // If metadata already loaded, seek now
+    if (video.readyState >= 1) {
+      handleLoadedMetadata();
+    }
 
     return () => {
-      plyr.off('timeupdate', handleTimeUpdate);
-      plyr.off('ended', handleVideoEnded);
-      plyr.off('ready', handleReady);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('ended', handleEnded);
     };
   }, [currentLesson?.id, currentLesson?.video_url, getInitialSeekTime, handleProgress, handleVideoEnded]);
 
@@ -316,8 +365,8 @@ export default function CourseLearning() {
 
   const handleLessonClick = (subsection: Subsection) => {
     // Save current progress before switching
-    if (currentLesson && plyrRef.current?.plyr) {
-      const currentTime = Number(plyrRef.current.plyr.currentTime || 0);
+    if (currentLesson && videoRef.current) {
+      const currentTime = videoRef.current.currentTime || 0;
       saveVideoProgress(currentLesson.id, currentTime);
     }
     setCurrentLesson(subsection);
@@ -468,29 +517,10 @@ export default function CourseLearning() {
               <div className="bg-background rounded-lg border overflow-hidden">
                 {currentLesson?.video_url ? (
                   <div className="aspect-video bg-black relative">
-                    <Plyr
-                      ref={plyrRef}
-                      source={{
-                        type: 'video',
-                        sources: [
-                          {
-                            src: currentLesson.video_url,
-                          },
-                        ],
-                      }}
-                      options={{
-                        controls: [
-                          'play-large',
-                          'play',
-                          'progress',
-                          'current-time',
-                          'duration',
-                          'mute',
-                          'volume',
-                          'settings',
-                          'fullscreen',
-                        ],
-                      }}
+                    <PlyrPlayer
+                      onVideoRef={(el) => { videoRef.current = el; }}
+                      src={currentLesson.video_url}
+                      key={currentLesson.id}
                     />
                     {/* Resume timestamp indicator */}
                     {videoProgress.get(currentLesson.id) && videoProgress.get(currentLesson.id)! > 0 && played === 0 && (
