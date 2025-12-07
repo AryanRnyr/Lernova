@@ -18,34 +18,26 @@ interface PlyrPlayerProps {
   onVideoRef?: (el: HTMLVideoElement | null) => void;
 }
 
-const guessVideoMimeType = (url: string) => {
-  const clean = url.split("?")[0].toLowerCase();
-  if (clean.endsWith(".m3u8")) return "application/x-mpegURL";
-  if (clean.endsWith(".webm")) return "video/webm";
-  if (clean.endsWith(".ogg") || clean.endsWith(".ogv")) return "video/ogg";
-  return "video/mp4";
-};
-
 const PlyrPlayer = ({ src, onVideoRef }: PlyrPlayerProps) => {
   const apiRef = useRef<APITypes | null>(null);
 
-  const options: PlyrProps["options"] = {
+  const options: PlyrProps['options'] = {
     controls: [
-      "play-large",
-      "play",
-      "progress",
-      "current-time",
-      "duration",
-      "mute",
-      "volume",
-      "settings",
-      "fullscreen",
+      'play-large',
+      'play',
+      'progress',
+      'current-time',
+      'duration',
+      'mute',
+      'volume',
+      'settings',
+      'fullscreen',
     ],
   };
 
-  const source: PlyrProps["source"] = {
-    type: "video",
-    sources: [{ src, type: guessVideoMimeType(src) }],
+  const source: PlyrProps['source'] = {
+    type: 'video',
+    sources: [{ src }],
   };
 
   const rpiRef = usePlyr(apiRef, { options, source });
@@ -57,13 +49,7 @@ const PlyrPlayer = ({ src, onVideoRef }: PlyrPlayerProps) => {
         onVideoRef?.(el);
       }}
       className="w-full h-full"
-      playsInline
-      crossOrigin="anonymous"
-      controls
-    >
-      {/* Fallback source so the browser can play even if Plyr init fails */}
-      <source src={src} type={guessVideoMimeType(src)} />
-    </video>
+    />
   );
 };
 
@@ -537,15 +523,11 @@ export default function CourseLearning() {
                       key={currentLesson.id}
                     />
                     {/* Resume timestamp indicator */}
-                    {(() => {
-                      const saved = videoProgress.get(currentLesson.id) ?? 0;
-                      if (!Number.isFinite(saved) || saved <= 0 || played !== 0) return null;
-                      return (
-                        <div className="absolute bottom-16 left-4 bg-background/90 text-foreground px-3 py-1 rounded-md text-sm font-medium">
-                          Resume from {formatTimestamp(saved)}
-                        </div>
-                      );
-                    })()}
+                    {videoProgress.get(currentLesson.id) && videoProgress.get(currentLesson.id)! > 0 && played === 0 && (
+                      <div className="absolute bottom-16 left-4 bg-background/90 text-foreground px-3 py-1 rounded-md text-sm font-medium">
+                        Resume from {formatTimestamp(videoProgress.get(currentLesson.id)!)}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="aspect-video bg-muted flex items-center justify-center">
