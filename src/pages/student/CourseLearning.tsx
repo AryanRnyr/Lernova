@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { usePlyr, PlyrProps, APITypes } from 'plyr-react';
-import 'plyr-react/plyr.css';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -10,46 +8,208 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
-import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText } from 'lucide-react';
+import { CheckCircle, Circle, PlayCircle, ChevronLeft, Clock, FileText, Play, Pause, Volume2, VolumeX, Maximize, Settings } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 
-// Custom Plyr player component using usePlyr hook
-interface PlyrPlayerProps {
+// Custom Video Player Component
+interface VideoPlayerProps {
   src: string;
-  onVideoRef?: (el: HTMLVideoElement | null) => void;
+  onTimeUpdate?: (currentTime: number) => void;
+  onEnded?: () => void;
+  onDurationChange?: (duration: number) => void;
+  initialTime?: number;
 }
 
-const PlyrPlayer = ({ src, onVideoRef }: PlyrPlayerProps) => {
-  const apiRef = useRef<APITypes | null>(null);
+const VideoPlayer = ({ src, onTimeUpdate, onEnded, onDurationChange, initialTime = 0 }: VideoPlayerProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const options: PlyrProps['options'] = {
-    controls: [
-      'play-large',
-      'play',
-      'progress',
-      'current-time',
-      'duration',
-      'mute',
-      'volume',
-      'settings',
-      'fullscreen',
-    ],
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
   };
 
-  const source: PlyrProps['source'] = {
-    type: 'video',
-    sources: [{ src }],
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+      onTimeUpdate?.(videoRef.current.currentTime);
+    }
   };
 
-  const rpiRef = usePlyr(apiRef, { options, source });
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+      onDurationChange?.(videoRef.current.duration);
+      if (initialTime > 0) {
+        videoRef.current.currentTime = initialTime;
+      }
+    }
+  };
+
+  const handleSeek = (value: number[]) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = value[0];
+      setCurrentTime(value[0]);
+    }
+  };
+
+  const handleVolumeChange = (value: number[]) => {
+    if (videoRef.current) {
+      videoRef.current.volume = value[0];
+      setVolume(value[0]);
+      setIsMuted(value[0] === 0);
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (containerRef.current) {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        containerRef.current.requestFullscreen();
+      }
+    }
+  };
+
+  const cyclePlaybackRate = () => {
+    const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const currentIndex = rates.indexOf(playbackRate);
+    const nextIndex = (currentIndex + 1) % rates.length;
+    const newRate = rates[nextIndex];
+    setPlaybackRate(newRate);
+    if (videoRef.current) {
+      videoRef.current.playbackRate = newRate;
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (hideControlsTimeout.current) {
+      clearTimeout(hideControlsTimeout.current);
+    }
+    hideControlsTimeout.current = setTimeout(() => {
+      if (isPlaying) setShowControls(false);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeout.current) {
+        clearTimeout(hideControlsTimeout.current);
+      }
+    };
+  }, []);
 
   return (
-    <video
-      ref={(el) => {
-        (rpiRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
-        onVideoRef?.(el);
-      }}
-      className="w-full h-full"
-    />
+    <div 
+      ref={containerRef}
+      className="relative bg-black rounded-lg overflow-hidden group"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => isPlaying && setShowControls(false)}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full aspect-video"
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        onEnded={() => {
+          setIsPlaying(false);
+          onEnded?.();
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onClick={togglePlay}
+      />
+      
+      {/* Play button overlay */}
+      {!isPlaying && (
+        <button 
+          onClick={togglePlay}
+          className="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity"
+        >
+          <div className="w-20 h-20 rounded-full bg-primary/90 flex items-center justify-center">
+            <Play className="w-10 h-10 text-primary-foreground ml-1" />
+          </div>
+        </button>
+      )}
+
+      {/* Controls */}
+      <div className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 transition-opacity ${showControls ? 'opacity-100' : 'opacity-0'}`}>
+        {/* Progress bar */}
+        <Slider
+          value={[currentTime]}
+          max={duration || 100}
+          step={0.1}
+          onValueChange={handleSeek}
+          className="mb-3 cursor-pointer"
+        />
+        
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={togglePlay} className="text-white hover:text-primary transition-colors">
+              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <button onClick={toggleMute} className="text-white hover:text-primary transition-colors">
+                {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+              </button>
+              <Slider
+                value={[isMuted ? 0 : volume]}
+                max={1}
+                step={0.1}
+                onValueChange={handleVolumeChange}
+                className="w-20"
+              />
+            </div>
+            
+            <span className="text-white text-sm">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={cyclePlaybackRate} 
+              className="text-white hover:text-primary transition-colors text-sm font-medium px-2 py-1 rounded bg-white/20"
+            >
+              {playbackRate}x
+            </button>
+            <button onClick={toggleFullscreen} className="text-white hover:text-primary transition-colors">
+              <Maximize className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -102,7 +262,6 @@ export default function CourseLearning() {
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -305,55 +464,6 @@ export default function CourseLearning() {
     }
   }, [currentLesson, completedLessons]);
 
-  // Get saved progress for seeking
-  const getInitialSeekTime = useCallback(() => {
-    if (currentLesson) {
-      const savedProgress = videoProgress.get(currentLesson.id);
-      if (savedProgress && savedProgress > 0) {
-        return savedProgress;
-      }
-    }
-    return 0;
-  }, [currentLesson, videoProgress]);
-
-  // Wire up player events (timeupdate, ended, resume) via native video element
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !currentLesson?.video_url) return;
-
-    const handleTimeUpdate = () => {
-      const currentTime = video.currentTime || 0;
-      handleProgress({ playedSeconds: currentTime });
-    };
-
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration || 0);
-      const seekTime = getInitialSeekTime();
-      if (seekTime > 0) {
-        video.currentTime = seekTime;
-      }
-    };
-
-    const handleEnded = () => {
-      handleVideoEnded();
-    };
-
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('ended', handleEnded);
-
-    // If metadata already loaded, seek now
-    if (video.readyState >= 1) {
-      handleLoadedMetadata();
-    }
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('ended', handleEnded);
-    };
-  }, [currentLesson?.id, currentLesson?.video_url, getInitialSeekTime, handleProgress, handleVideoEnded]);
-
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -364,11 +474,6 @@ export default function CourseLearning() {
   }, []);
 
   const handleLessonClick = (subsection: Subsection) => {
-    // Save current progress before switching
-    if (currentLesson && videoRef.current) {
-      const currentTime = videoRef.current.currentTime || 0;
-      saveVideoProgress(currentLesson.id, currentTime);
-    }
     setCurrentLesson(subsection);
     setPlayed(0);
   };
@@ -516,19 +621,14 @@ export default function CourseLearning() {
             <div className="lg:col-span-2 space-y-4">
               <div className="bg-background rounded-lg border overflow-hidden">
                 {currentLesson?.video_url ? (
-                  <div className="aspect-video bg-black relative">
-                    <PlyrPlayer
-                      onVideoRef={(el) => { videoRef.current = el; }}
-                      src={currentLesson.video_url}
-                      key={currentLesson.id}
-                    />
-                    {/* Resume timestamp indicator */}
-                    {videoProgress.get(currentLesson.id) && videoProgress.get(currentLesson.id)! > 0 && played === 0 && (
-                      <div className="absolute bottom-16 left-4 bg-background/90 text-foreground px-3 py-1 rounded-md text-sm font-medium">
-                        Resume from {formatTimestamp(videoProgress.get(currentLesson.id)!)}
-                      </div>
-                    )}
-                  </div>
+                  <VideoPlayer
+                    key={currentLesson.id}
+                    src={currentLesson.video_url}
+                    initialTime={videoProgress.get(currentLesson.id) || 0}
+                    onTimeUpdate={(time) => handleProgress({ playedSeconds: time })}
+                    onEnded={handleVideoEnded}
+                    onDurationChange={(d) => setDuration(d)}
+                  />
                 ) : (
                   <div className="aspect-video bg-muted flex items-center justify-center">
                     <div className="text-center text-muted-foreground">
