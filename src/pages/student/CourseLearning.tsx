@@ -262,7 +262,8 @@ export default function CourseLearning() {
   const [played, setPlayed] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  const progressSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedAtRef = useRef<number>(0);
+  const currentPlaybackTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -417,45 +418,62 @@ export default function CourseLearning() {
     }
   };
 
-  // Save video progress to database (debounced)
-  const saveVideoProgress = useCallback(async (subsectionId: string, currentTime: number) => {
-    if (!user) return;
-    
-    try {
-      await supabase.from('course_progress').upsert({
+  // Save video progress to database (throttled)
+  const saveVideoProgress = useCallback(
+    async (subsectionId: string, currentTime: number) => {
+      if (!user) return;
+
+      const payload = {
         user_id: user.id,
         subsection_id: subsectionId,
         video_progress: Math.floor(currentTime),
         last_watched_at: new Date().toISOString(),
         completed: completedLessons.has(subsectionId),
-      }, {
-        onConflict: 'user_id,subsection_id',
-      });
-    } catch (error) {
-      console.error('Error saving video progress:', error);
-    }
-  }, [user, completedLessons]);
+      };
 
-  // Handle video progress update (debounced save every 5 seconds)
+      try {
+        // Avoid relying on a DB-level unique constraint by doing update-then-insert.
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('course_progress')
+          .update(payload)
+          .eq('user_id', user.id)
+          .eq('subsection_id', subsectionId)
+          .select('id');
+
+        if (updateError) throw updateError;
+
+        if (!updatedRows || updatedRows.length === 0) {
+          const { error: insertError } = await supabase.from('course_progress').insert(payload);
+          if (insertError) throw insertError;
+        }
+      } catch (error) {
+        console.error('Error saving video progress:', error);
+      }
+    },
+    [user, completedLessons]
+  );
+
+  // Handle video progress update (save at most once per 5 seconds while playing)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleProgress = useCallback((state: any) => {
-    if (!currentLesson) return;
+  const handleProgress = useCallback(
+    (state: any) => {
+      if (!currentLesson) return;
 
-    const currentTime = state.playedSeconds;
-    setPlayed(currentTime);
+      const currentTime = state.playedSeconds as number;
+      currentPlaybackTimeRef.current = currentTime;
+      setPlayed(currentTime);
 
-    // Update local state
-    setVideoProgress(prev => new Map(prev).set(currentLesson.id, currentTime));
+      // Update local state immediately
+      setVideoProgress((prev) => new Map(prev).set(currentLesson.id, currentTime));
 
-    // Debounce save to database
-    if (progressSaveTimeout.current) {
-      clearTimeout(progressSaveTimeout.current);
-    }
-    
-    progressSaveTimeout.current = setTimeout(() => {
-      saveVideoProgress(currentLesson.id, currentTime);
-    }, 5000); // Save every 5 seconds
-  }, [currentLesson, saveVideoProgress]);
+      const now = Date.now();
+      if (now - lastSavedAtRef.current >= 5000) {
+        lastSavedAtRef.current = now;
+        void saveVideoProgress(currentLesson.id, currentTime);
+      }
+    },
+    [currentLesson, saveVideoProgress]
+  );
 
   // Handle video ended
   const handleVideoEnded = useCallback(() => {
@@ -464,18 +482,24 @@ export default function CourseLearning() {
     }
   }, [currentLesson, completedLessons]);
 
-  // Cleanup timeout on unmount
+  // Flush progress when leaving/unmounting
   useEffect(() => {
     return () => {
-      if (progressSaveTimeout.current) {
-        clearTimeout(progressSaveTimeout.current);
+      if (currentLesson) {
+        void saveVideoProgress(currentLesson.id, currentPlaybackTimeRef.current);
       }
     };
-  }, []);
+  }, [currentLesson, saveVideoProgress]);
 
   const handleLessonClick = (subsection: Subsection) => {
+    // Flush current lesson progress before switching
+    if (currentLesson) {
+      void saveVideoProgress(currentLesson.id, currentPlaybackTimeRef.current);
+    }
     setCurrentLesson(subsection);
     setPlayed(0);
+    currentPlaybackTimeRef.current = 0;
+    lastSavedAtRef.current = 0;
   };
 
   const markLessonComplete = async () => {
