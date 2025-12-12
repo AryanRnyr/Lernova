@@ -37,7 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye } from 'lucide-react';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye, UserCheck, UserX, Clock } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface Category {
@@ -52,6 +52,13 @@ interface UserWithRole {
   email: string;
   full_name: string | null;
   roles: string[];
+}
+
+interface PendingInstructor {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  created_at: string;
 }
 
 interface CourseForAdmin {
@@ -70,7 +77,8 @@ const AdminDashboard = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [courses, setCourses] = useState<CourseForAdmin[]>([]);
-  const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0 });
+  const [pendingInstructors, setPendingInstructors] = useState<PendingInstructor[]>([]);
+  const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0, pendingInstructors: 0 });
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -106,10 +114,10 @@ const AdminDashboard = () => {
         console.error('Error fetching users:', usersError);
       }
 
-      // Fetch all roles
+      // Fetch all roles with approval status
       const { data: rolesData } = await supabase
         .from('user_roles')
-        .select('user_id, role');
+        .select('user_id, role, is_approved, created_at');
 
       if (usersWithEmails) {
         const usersMap = new Map<string, UserWithRole>();
@@ -133,6 +141,26 @@ const AdminDashboard = () => {
         }
 
         setUsers(Array.from(usersMap.values()));
+
+        // Find pending instructors (instructors with is_approved = false)
+        const pendingList: PendingInstructor[] = [];
+        if (rolesData) {
+          const pendingRoles = rolesData.filter(
+            (r: any) => r.role === 'instructor' && r.is_approved === false
+          );
+          for (const role of pendingRoles) {
+            const user = usersMap.get(role.user_id);
+            if (user) {
+              pendingList.push({
+                user_id: role.user_id,
+                email: user.email,
+                full_name: user.full_name,
+                created_at: role.created_at,
+              });
+            }
+          }
+        }
+        setPendingInstructors(pendingList);
       }
 
       // Fetch all courses for admin management
@@ -165,10 +193,18 @@ const AdminDashboard = () => {
         .from('courses')
         .select('*', { count: 'exact', head: true });
 
+      // Count pending instructors
+      const { count: pendingCount } = await supabase
+        .from('user_roles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'instructor')
+        .eq('is_approved', false);
+
       setStats({
         users: usersCount || 0,
         courses: coursesCount || 0,
         categories: categoriesData?.length || 0,
+        pendingInstructors: pendingCount || 0,
       });
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -252,7 +288,7 @@ const AdminDashboard = () => {
   const handleAssignRole = async (userId: string, role: 'instructor' | 'admin') => {
     const { error } = await supabase
       .from('user_roles')
-      .insert({ user_id: userId, role });
+      .insert({ user_id: userId, role, is_approved: true });
 
     if (error) {
       if (error.code === '23505') {
@@ -278,6 +314,44 @@ const AdminDashboard = () => {
     } else {
       await fetchData();
       toast({ title: 'Role removed' });
+    }
+  };
+
+  const handleApproveInstructor = async (userId: string) => {
+    const { error } = await supabase
+      .from('user_roles')
+      .update({ is_approved: true })
+      .eq('user_id', userId)
+      .eq('role', 'instructor');
+
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } else {
+      await fetchData();
+      toast({ title: 'Instructor approved', description: 'They can now create courses.' });
+    }
+  };
+
+  const handleRejectInstructor = async (userId: string) => {
+    // Remove the instructor role entirely
+    const { error } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+      .eq('role', 'instructor');
+
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } else {
+      // Ensure they have student role
+      await supabase.from('user_roles').upsert({
+        user_id: userId,
+        role: 'student',
+        is_approved: true,
+      }, { onConflict: 'user_id,role' });
+      
+      await fetchData();
+      toast({ title: 'Instructor request rejected', description: 'User has been set to student role.' });
     }
   };
 
@@ -334,7 +408,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -362,14 +436,124 @@ const AdminDashboard = () => {
               <div className="text-2xl font-bold">{stats.categories}</div>
             </CardContent>
           </Card>
+          <Card className={stats.pendingInstructors > 0 ? 'border-orange-200 bg-orange-50/50' : ''}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
+              <Clock className={`h-4 w-4 ${stats.pendingInstructors > 0 ? 'text-orange-500' : 'text-muted-foreground'}`} />
+            </CardHeader>
+            <CardContent>
+              <div className={`text-2xl font-bold ${stats.pendingInstructors > 0 ? 'text-orange-600' : ''}`}>
+                {stats.pendingInstructors}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        <Tabs defaultValue="categories" className="space-y-6">
+        <Tabs defaultValue={stats.pendingInstructors > 0 ? 'approvals' : 'categories'} className="space-y-6">
           <TabsList>
+            <TabsTrigger value="approvals" className="relative">
+              Instructor Approvals
+              {stats.pendingInstructors > 0 && (
+                <Badge className="ml-2 bg-orange-500 text-white text-xs px-1.5 py-0.5">
+                  {stats.pendingInstructors}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="users">Users & Roles</TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="approvals">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Instructor Approvals</CardTitle>
+                <CardDescription>
+                  Review and approve new instructor registrations. Instructors need approval before they can create courses.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : pendingInstructors.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <UserCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium">No pending approvals</p>
+                    <p className="text-sm">All instructor requests have been processed.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Requested On</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingInstructors.map((instructor) => (
+                        <TableRow key={instructor.user_id}>
+                          <TableCell className="font-medium">
+                            {instructor.full_name || 'Unnamed User'}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {instructor.email}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {new Date(instructor.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleApproveInstructor(instructor.user_id)}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <UserCheck className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="sm">
+                                    <UserX className="h-4 w-4 mr-1" />
+                                    Reject
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Reject Instructor Request</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to reject {instructor.full_name || instructor.email}'s instructor request? 
+                                      They will be set to a student role.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                      onClick={() => handleRejectInstructor(instructor.user_id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Reject
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="categories">
             <Card>
