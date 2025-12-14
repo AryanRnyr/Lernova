@@ -57,21 +57,14 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Check if already verified
-    if (verification.verified) {
-      return new Response(
-        JSON.stringify({ success: false, error: "This code has already been used" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        }
-      );
-    }
-
-    // Mark as verified
+    // Check if already verified - but allow retry within a short window
+    // Don't mark as verified until signup succeeds on frontend
+    // Just validate the OTP is correct and not expired
+    
+    // Delete the OTP after successful verification to prevent reuse
     await supabase
       .from("email_verifications")
-      .update({ verified: true })
+      .delete()
       .eq("id", verification.id);
 
     console.log("OTP verified successfully for:", email);
