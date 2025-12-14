@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useCart } from '@/hooks/useCart';
+import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 export const Navbar = () => {
   const { user, signOut } = useAuth();
   const { isAdmin, isInstructor, isStudent, loading: roleLoading } = useUserRole();
+  const { profile } = useProfile();
   const { count } = useCart();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -90,8 +92,11 @@ export const Navbar = () => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={user.user_metadata?.avatar_url} alt={user.user_metadata?.full_name} />
-                    <AvatarFallback>{getInitials(user.user_metadata?.full_name)}</AvatarFallback>
+                    <AvatarImage 
+                      src={profile?.avatar_url || user.user_metadata?.avatar_url} 
+                      alt={profile?.full_name || user.user_metadata?.full_name} 
+                    />
+                    <AvatarFallback>{getInitials(profile?.full_name || user.user_metadata?.full_name)}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>

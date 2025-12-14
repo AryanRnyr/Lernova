@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 
 const CreateCourse = () => {
   const { user } = useAuth();
-  const { isInstructor, isAdmin, loading: roleLoading } = useUserRole();
+  const { isInstructor, isAdmin, isPendingInstructor, loading: roleLoading } = useUserRole();
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -69,6 +69,22 @@ const CreateCourse = () => {
       <MainLayout>
         <div className="container py-8">
           <p>Loading...</p>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (isPendingInstructor()) {
+    return (
+      <MainLayout>
+        <div className="container py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Approval Pending</h1>
+          <p className="text-muted-foreground mb-6">
+            Your instructor account is pending approval. You'll be able to create courses once an admin approves your application.
+          </p>
+          <Button asChild>
+            <Link to="/">Go Home</Link>
+          </Button>
         </div>
       </MainLayout>
     );
