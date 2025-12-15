@@ -80,6 +80,7 @@ const AdminDashboard = () => {
   const [pendingInstructors, setPendingInstructors] = useState<PendingInstructor[]>([]);
   const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0, pendingInstructors: 0 });
   const [loading, setLoading] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
   const { toast } = useToast();
 
   // Category dialog
@@ -89,10 +90,12 @@ const AdminDashboard = () => {
   const [categoryDescription, setCategoryDescription] = useState('');
 
   useEffect(() => {
-    if (isAdmin()) {
+    // Only fetch once when admin status is confirmed
+    if (isAdmin() && !hasFetched && !roleLoading) {
+      setHasFetched(true);
       fetchData();
     }
-  }, [isAdmin]);
+  }, [isAdmin, roleLoading, hasFetched]);
 
   const fetchData = async () => {
     try {

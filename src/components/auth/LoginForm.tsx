@@ -6,15 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Mail, Lock } from 'lucide-react';
+import { Loader2, Mail, Lock, AlertTriangle } from 'lucide-react';
 
 export const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
-  const { signIn, user } = useAuth();
+  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null);
+  const { signIn, signOut, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -25,18 +27,32 @@ export const LoginForm = () => {
       
       setRedirecting(true);
       
-      // Fetch user roles
+      // Fetch user roles with approval status
       const { data: roles } = await supabase
         .from('user_roles')
-        .select('role')
+        .select('role, is_approved')
         .eq('user_id', user.id);
       
-      const userRoles = roles?.map(r => r.role) || [];
+      const userRoles = roles || [];
+      const approvedRoles = userRoles.filter(r => r.is_approved).map(r => r.role);
+      
+      // Check if instructor was rejected (has instructor role but not approved)
+      const hasUnapprovedInstructor = userRoles.some(
+        r => r.role === 'instructor' && !r.is_approved
+      );
+      
+      if (hasUnapprovedInstructor && !approvedRoles.includes('admin')) {
+        // Show rejection message and sign out
+        setRejectionMessage('Your instructor application is pending approval or has been rejected. Please contact support for more information.');
+        await signOut();
+        setRedirecting(false);
+        return;
+      }
       
       // Redirect based on role priority: admin > instructor > student
-      if (userRoles.includes('admin')) {
+      if (approvedRoles.includes('admin')) {
         navigate('/admin');
-      } else if (userRoles.includes('instructor')) {
+      } else if (approvedRoles.includes('instructor')) {
         navigate('/instructor');
       } else {
         navigate('/dashboard');
@@ -44,7 +60,7 @@ export const LoginForm = () => {
     };
 
     handleRoleRedirect();
-  }, [user, navigate, redirecting]);
+  }, [user, navigate, redirecting, signOut]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +94,13 @@ export const LoginForm = () => {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
+          {rejectionMessage && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Access Denied</AlertTitle>
+              <AlertDescription>{rejectionMessage}</AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <div className="relative">
