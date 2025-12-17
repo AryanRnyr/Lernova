@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -74,6 +75,7 @@ interface CourseForAdmin {
 
 const AdminDashboard = () => {
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { user: currentUser } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [courses, setCourses] = useState<CourseForAdmin[]>([]);
@@ -187,10 +189,8 @@ const AdminDashboard = () => {
         setCourses(coursesWithInstructors);
       }
 
-      // Fetch counts
-      const { count: usersCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
+      // Fetch counts - use the users array length since it comes from auth.users via RPC
+      const usersCount = usersWithEmails?.length || 0;
 
       const { count: coursesCount } = await supabase
         .from('courses')
@@ -306,6 +306,12 @@ const AdminDashboard = () => {
   };
 
   const handleRemoveRole = async (userId: string, role: 'admin' | 'instructor' | 'student') => {
+    // Prevent self-removal of admin role
+    if (role === 'admin' && userId === currentUser?.id) {
+      toast({ variant: 'destructive', title: 'Error', description: 'You cannot remove your own admin role' });
+      return;
+    }
+
     const { error } = await supabase
       .from('user_roles')
       .delete()
@@ -318,6 +324,36 @@ const AdminDashboard = () => {
       await fetchData();
       toast({ title: 'Role removed' });
     }
+  };
+
+  const handleMakeStudent = async (userId: string) => {
+    // Prevent self-demotion
+    if (userId === currentUser?.id) {
+      toast({ variant: 'destructive', title: 'Error', description: 'You cannot demote yourself to student only' });
+      return;
+    }
+
+    // Remove all roles except student
+    const { error: deleteError } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+      .neq('role', 'student');
+
+    if (deleteError) {
+      toast({ variant: 'destructive', title: 'Error', description: deleteError.message });
+      return;
+    }
+
+    // Ensure student role exists
+    await supabase.from('user_roles').upsert({
+      user_id: userId,
+      role: 'student',
+      is_approved: true,
+    }, { onConflict: 'user_id,role' });
+
+    await fetchData();
+    toast({ title: 'User set to student role' });
   };
 
   const handleApproveInstructor = async (userId: string) => {
@@ -711,13 +747,23 @@ const AdminDashboard = () => {
                                   Make Admin
                                 </Button>
                               )}
-                              {user.roles.includes('admin') && (
+                              {user.roles.includes('admin') && user.user_id !== currentUser?.id && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleRemoveRole(user.user_id, 'admin')}
                                 >
                                   Remove Admin
+                                </Button>
+                              )}
+                              {(user.roles.includes('admin') || user.roles.includes('instructor')) && user.user_id !== currentUser?.id && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleMakeStudent(user.user_id)}
+                                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                >
+                                  Make Student
                                 </Button>
                               )}
                             </div>
