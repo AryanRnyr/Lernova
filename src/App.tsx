@@ -17,6 +17,7 @@ import InstructorDashboard from "./pages/instructor/InstructorDashboard";
 import CreateCourse from "./pages/instructor/CreateCourse";
 import EditCourse from "./pages/instructor/EditCourse";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminSettings from "./pages/admin/AdminSettings";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import CourseLearning from "./pages/student/CourseLearning";
 import MyReviews from "./pages/student/MyReviews";
@@ -59,6 +60,7 @@ const App = () => (
             <Route path="/instructor/courses/new" element={<CreateCourse />} />
             <Route path="/instructor/courses/:id/edit" element={<EditCourse />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -38,8 +38,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye, UserCheck, UserX, Clock } from 'lucide-react';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye, UserCheck, UserX, Clock, Settings, Ban } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InstructorDetailsDialog } from '@/components/admin/InstructorDetailsDialog';
 
 interface Category {
   id: string;
@@ -83,6 +84,7 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0, pendingInstructors: 0 });
   const [loading, setLoading] = useState(true);
   const [hasFetched, setHasFetched] = useState(false);
+  const [selectedInstructor, setSelectedInstructor] = useState<PendingInstructor | null>(null);
   const { toast } = useToast();
 
   // Category dialog
@@ -356,7 +358,7 @@ const AdminDashboard = () => {
     toast({ title: 'User set to student role' });
   };
 
-  const handleApproveInstructor = async (userId: string) => {
+  const handleApproveInstructor = async (userId: string, email: string, name: string | null) => {
     const { error } = await supabase
       .from('user_roles')
       .update({ is_approved: true })
@@ -366,8 +368,54 @@ const AdminDashboard = () => {
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } else {
+      // Send approval email
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: 'Your Instructor Application Has Been Approved!',
+          html: `<h2>Congratulations ${name || 'Instructor'}!</h2><p>Your instructor application on Lernova has been approved. You can now log in and start creating courses.</p><p>Welcome to our teaching community!</p>`,
+        },
+      });
       await fetchData();
       toast({ title: 'Instructor approved', description: 'They can now create courses.' });
+    }
+  };
+
+  const handleRejectInstructor = async (userId: string, email: string, name: string | null) => {
+    const { error } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+      .eq('role', 'instructor');
+
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } else {
+      await supabase.from('user_roles').upsert({ user_id: userId, role: 'student', is_approved: true }, { onConflict: 'user_id,role' });
+      // Send rejection email
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: 'Update on Your Instructor Application',
+          html: `<h2>Hello ${name || 'User'},</h2><p>Thank you for your interest in becoming an instructor on Lernova. After reviewing your application, we're unable to approve it at this time.</p><p>You can continue using Lernova as a student. If you have questions, please contact support.</p>`,
+        },
+      });
+      await fetchData();
+      toast({ title: 'Instructor request rejected' });
+    }
+  };
+
+  const handleDisableAccount = async (userId: string) => {
+    if (userId === currentUser?.id) {
+      toast({ variant: 'destructive', title: 'Error', description: 'You cannot disable your own account' });
+      return;
+    }
+    const { error } = await supabase.from('profiles').update({ is_disabled: true }).eq('user_id', userId);
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } else {
+      await fetchData();
+      toast({ title: 'Account disabled' });
     }
   };
 
@@ -441,9 +489,14 @@ const AdminDashboard = () => {
   return (
     <MainLayout>
       <div className="container py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Manage users, categories, courses, and platform settings</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Manage users, categories, courses, and platform settings</p>
+          </div>
+          <Button asChild>
+            <Link to="/admin/settings"><Settings className="h-4 w-4 mr-2" /> Settings</Link>
+          </Button>
         </div>
 
         {/* Stats */}
@@ -548,14 +601,16 @@ const AdminDashboard = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => setSelectedInstructor(instructor)}>
+                                <Eye className="h-4 w-4 mr-1" /> View Details
+                              </Button>
                               <Button
                                 variant="default"
                                 size="sm"
-                                onClick={() => handleApproveInstructor(instructor.user_id)}
+                                onClick={() => handleApproveInstructor(instructor.user_id, instructor.email, instructor.full_name)}
                                 className="bg-green-600 hover:bg-green-700"
                               >
-                                <UserCheck className="h-4 w-4 mr-1" />
-                                Approve
+                                <UserCheck className="h-4 w-4 mr-1" /> Approve
                               </Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -575,7 +630,7 @@ const AdminDashboard = () => {
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction 
-                                      onClick={() => handleRejectInstructor(instructor.user_id)}
+                                      onClick={() => handleRejectInstructor(instructor.user_id, instructor.email, instructor.full_name)}
                                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
                                       Reject
