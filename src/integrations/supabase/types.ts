@@ -276,6 +276,54 @@ export type Database = {
           },
         ]
       }
+      instructor_applications: {
+        Row: {
+          account_id: string | null
+          account_name: string | null
+          bio: string | null
+          created_at: string
+          current_occupation: string | null
+          field_of_expertise: string | null
+          highest_qualification: string | null
+          id: string
+          payment_method: string | null
+          resume_url: string | null
+          updated_at: string
+          user_id: string
+          years_of_experience: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          account_name?: string | null
+          bio?: string | null
+          created_at?: string
+          current_occupation?: string | null
+          field_of_expertise?: string | null
+          highest_qualification?: string | null
+          id?: string
+          payment_method?: string | null
+          resume_url?: string | null
+          updated_at?: string
+          user_id: string
+          years_of_experience?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string | null
+          bio?: string | null
+          created_at?: string
+          current_occupation?: string | null
+          field_of_expertise?: string | null
+          highest_qualification?: string | null
+          id?: string
+          payment_method?: string | null
+          resume_url?: string | null
+          updated_at?: string
+          user_id?: string
+          years_of_experience?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -389,6 +437,30 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_settings: {
+        Row: {
+          id: string
+          setting_key: string
+          setting_value: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          setting_key: string
+          setting_value: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          setting_key?: string
+          setting_value?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -397,6 +469,7 @@ export type Database = {
           date_of_birth: string | null
           full_name: string | null
           id: string
+          is_disabled: boolean
           phone_number: string | null
           updated_at: string
           user_id: string
@@ -408,6 +481,7 @@ export type Database = {
           date_of_birth?: string | null
           full_name?: string | null
           id?: string
+          is_disabled?: boolean
           phone_number?: string | null
           updated_at?: string
           user_id: string
@@ -419,6 +493,7 @@ export type Database = {
           date_of_birth?: string | null
           full_name?: string | null
           id?: string
+          is_disabled?: boolean
           phone_number?: string | null
           updated_at?: string
           user_id?: string
