@@ -419,28 +419,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleRejectInstructor = async (userId: string) => {
-    // Remove the instructor role entirely
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', 'instructor');
-
-    if (error) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message });
-    } else {
-      // Ensure they have student role
-      await supabase.from('user_roles').upsert({
-        user_id: userId,
-        role: 'student',
-        is_approved: true,
-      }, { onConflict: 'user_id,role' });
-      
-      await fetchData();
-      toast({ title: 'Instructor request rejected', description: 'User has been set to student role.' });
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
