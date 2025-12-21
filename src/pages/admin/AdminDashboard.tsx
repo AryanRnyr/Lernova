@@ -38,7 +38,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Shield, Eye, UserCheck, UserX, Clock, Settings, Ban } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, UserMinus } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InstructorDetailsDialog } from '@/components/admin/InstructorDetailsDialog';
 
@@ -53,7 +60,8 @@ interface UserWithRole {
   user_id: string;
   email: string;
   full_name: string | null;
-  roles: string[];
+  role: string;
+  is_disabled: boolean;
 }
 
 interface PendingInstructor {
@@ -74,6 +82,21 @@ interface CourseForAdmin {
   last_edited_at: string | null;
 }
 
+interface SalesData {
+  totalSales: number;
+  totalRevenue: number;
+  commissionEarned: number;
+  instructorPayouts: {
+    instructor_id: string;
+    instructor_name: string;
+    totalEarned: number;
+    commissionPaid: number;
+    netEarnings: number;
+    paidOut: number;
+    pending: number;
+  }[];
+}
+
 const AdminDashboard = () => {
   const { isAdmin, loading: roleLoading } = useUserRole();
   const { user: currentUser } = useAuth();
@@ -82,9 +105,11 @@ const AdminDashboard = () => {
   const [courses, setCourses] = useState<CourseForAdmin[]>([]);
   const [pendingInstructors, setPendingInstructors] = useState<PendingInstructor[]>([]);
   const [stats, setStats] = useState({ users: 0, courses: 0, categories: 0, pendingInstructors: 0 });
+  const [salesData, setSalesData] = useState<SalesData>({ totalSales: 0, totalRevenue: 0, commissionEarned: 0, instructorPayouts: [] });
   const [loading, setLoading] = useState(true);
   const [hasFetched, setHasFetched] = useState(false);
   const [selectedInstructor, setSelectedInstructor] = useState<PendingInstructor | null>(null);
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(20);
   const { toast } = useToast();
 
   // Category dialog
@@ -94,7 +119,6 @@ const AdminDashboard = () => {
   const [categoryDescription, setCategoryDescription] = useState('');
 
   useEffect(() => {
-    // Only fetch once when admin status is confirmed
     if (isAdmin() && !hasFetched && !roleLoading) {
       setHasFetched(true);
       fetchData();
@@ -113,7 +137,17 @@ const AdminDashboard = () => {
         setCategories(categoriesData);
       }
 
-      // Fetch users with emails using the new function
+      // Fetch commission percentage
+      const { data: settingsData } = await supabase
+        .from('platform_settings')
+        .select('setting_value')
+        .eq('setting_key', 'commission_percentage')
+        .single();
+
+      const commission = settingsData ? parseFloat(settingsData.setting_value) : 20;
+      setCommissionPercentage(commission);
+
+      // Fetch users with emails using the RPC function
       const { data: usersWithEmails, error: usersError } = await supabase
         .rpc('get_all_users_with_emails');
 
@@ -126,7 +160,16 @@ const AdminDashboard = () => {
         .from('user_roles')
         .select('user_id, role, is_approved, created_at');
 
+      // Fetch profiles with disabled status
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('user_id, is_disabled');
+
+      const disabledMap = new Map<string, boolean>();
+      profilesData?.forEach((p: any) => disabledMap.set(p.user_id, p.is_disabled));
+
       if (usersWithEmails) {
+        // Create user list with primary role (priority: admin > instructor > student)
         const usersMap = new Map<string, UserWithRole>();
         
         usersWithEmails.forEach((user: any) => {
@@ -134,22 +177,28 @@ const AdminDashboard = () => {
             user_id: user.user_id,
             email: user.email || '',
             full_name: user.full_name,
-            roles: [],
+            role: 'student',
+            is_disabled: disabledMap.get(user.user_id) || false,
           });
         });
 
         if (rolesData) {
           rolesData.forEach((role: any) => {
             const user = usersMap.get(role.user_id);
-            if (user) {
-              user.roles.push(role.role);
+            if (user && role.is_approved) {
+              // Set priority: admin > instructor > student
+              if (role.role === 'admin') {
+                user.role = 'admin';
+              } else if (role.role === 'instructor' && user.role !== 'admin') {
+                user.role = 'instructor';
+              }
             }
           });
         }
 
         setUsers(Array.from(usersMap.values()));
 
-        // Find pending instructors (instructors with is_approved = false)
+        // Find pending instructors
         const pendingList: PendingInstructor[] = [];
         if (rolesData) {
           const pendingRoles = rolesData.filter(
@@ -177,7 +226,6 @@ const AdminDashboard = () => {
         .order('created_at', { ascending: false });
 
       if (coursesData) {
-        // Fetch instructor names for each course
         const coursesWithInstructors = await Promise.all(
           coursesData.map(async (course) => {
             const { data: instructor } = await supabase
@@ -191,14 +239,15 @@ const AdminDashboard = () => {
         setCourses(coursesWithInstructors);
       }
 
-      // Fetch counts - use the users array length since it comes from auth.users via RPC
-      const usersCount = usersWithEmails?.length || 0;
+      // Fetch sales data
+      await fetchSalesData(commission);
 
+      // Fetch counts
+      const usersCount = usersWithEmails?.length || 0;
       const { count: coursesCount } = await supabase
         .from('courses')
         .select('*', { count: 'exact', head: true });
 
-      // Count pending instructors
       const { count: pendingCount } = await supabase
         .from('user_roles')
         .select('*', { count: 'exact', head: true })
@@ -217,6 +266,66 @@ const AdminDashboard = () => {
     }
 
     setLoading(false);
+  };
+
+  const fetchSalesData = async (commission: number) => {
+    // Fetch all completed orders with course info
+    const { data: ordersData } = await supabase
+      .from('orders')
+      .select('amount, course_id, courses(instructor_id, title)')
+      .eq('status', 'completed');
+
+    // Fetch payout requests
+    const { data: payoutsData } = await supabase
+      .from('payout_requests')
+      .select('instructor_id, amount, status')
+      .eq('status', 'completed');
+
+    // Calculate per-instructor earnings
+    const instructorEarnings = new Map<string, { totalEarned: number; instructor_id: string }>();
+    
+    ordersData?.forEach((order: any) => {
+      const instructorId = order.courses?.instructor_id;
+      if (instructorId) {
+        const existing = instructorEarnings.get(instructorId) || { totalEarned: 0, instructor_id: instructorId };
+        existing.totalEarned += order.amount || 0;
+        instructorEarnings.set(instructorId, existing);
+      }
+    });
+
+    // Get instructor names
+    const instructorPayouts: SalesData['instructorPayouts'] = [];
+    for (const [instructorId, data] of instructorEarnings) {
+      const { data: profile } = await supabase
+        .rpc('get_instructor_profile', { instructor_user_id: instructorId });
+      
+      const paidOut = payoutsData
+        ?.filter((p: any) => p.instructor_id === instructorId)
+        .reduce((acc: number, p: any) => acc + (p.amount || 0), 0) || 0;
+
+      const commissionPaid = data.totalEarned * (commission / 100);
+      const netEarnings = data.totalEarned - commissionPaid;
+
+      instructorPayouts.push({
+        instructor_id: instructorId,
+        instructor_name: profile?.[0]?.full_name || 'Unknown',
+        totalEarned: data.totalEarned,
+        commissionPaid,
+        netEarnings,
+        paidOut,
+        pending: Math.max(0, netEarnings - paidOut),
+      });
+    }
+
+    const totalRevenue = ordersData?.reduce((acc, o: any) => acc + (o.amount || 0), 0) || 0;
+    const commissionEarned = totalRevenue * (commission / 100);
+
+    setSalesData({
+      totalSales: ordersData?.length || 0,
+      totalRevenue,
+      commissionEarned,
+      instructorPayouts: instructorPayouts.sort((a, b) => b.pending - a.pending),
+    });
   };
 
   const generateSlug = (name: string) => {
@@ -290,72 +399,47 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleAssignRole = async (userId: string, role: 'instructor' | 'admin') => {
-    const { error } = await supabase
-      .from('user_roles')
-      .insert({ user_id: userId, role, is_approved: true });
-
-    if (error) {
-      if (error.code === '23505') {
-        toast({ variant: 'destructive', title: 'Error', description: 'User already has this role' });
-      } else {
-        toast({ variant: 'destructive', title: 'Error', description: error.message });
-      }
-    } else {
-      await fetchData();
-      toast({ title: 'Role assigned' });
-    }
-  };
-
-  const handleRemoveRole = async (userId: string, role: 'admin' | 'instructor' | 'student') => {
-    // Prevent self-removal of admin role
-    if (role === 'admin' && userId === currentUser?.id) {
-      toast({ variant: 'destructive', title: 'Error', description: 'You cannot remove your own admin role' });
+  const handleChangeRole = async (userId: string, newRole: string) => {
+    if (userId === currentUser?.id && newRole !== 'admin') {
+      toast({ variant: 'destructive', title: 'Error', description: 'You cannot change your own role from admin' });
       return;
     }
 
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', role);
+    // Delete existing roles
+    await supabase.from('user_roles').delete().eq('user_id', userId);
+
+    // Insert new role
+    const { error } = await supabase.from('user_roles').insert({
+      user_id: userId,
+      role: newRole,
+      is_approved: true,
+    });
 
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } else {
       await fetchData();
-      toast({ title: 'Role removed' });
+      toast({ title: 'Role updated' });
     }
   };
 
-  const handleMakeStudent = async (userId: string) => {
-    // Prevent self-demotion
+  const handleToggleDisable = async (userId: string, currentlyDisabled: boolean) => {
     if (userId === currentUser?.id) {
-      toast({ variant: 'destructive', title: 'Error', description: 'You cannot demote yourself to student only' });
+      toast({ variant: 'destructive', title: 'Error', description: 'You cannot disable your own account' });
       return;
     }
 
-    // Remove all roles except student
-    const { error: deleteError } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .neq('role', 'student');
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_disabled: !currentlyDisabled })
+      .eq('user_id', userId);
 
-    if (deleteError) {
-      toast({ variant: 'destructive', title: 'Error', description: deleteError.message });
-      return;
+    if (error) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    } else {
+      await fetchData();
+      toast({ title: currentlyDisabled ? 'Account enabled' : 'Account disabled' });
     }
-
-    // Ensure student role exists
-    await supabase.from('user_roles').upsert({
-      user_id: userId,
-      role: 'student',
-      is_approved: true,
-    }, { onConflict: 'user_id,role' });
-
-    await fetchData();
-    toast({ title: 'User set to student role' });
   };
 
   const handleApproveInstructor = async (userId: string, email: string, name: string | null) => {
@@ -368,7 +452,6 @@ const AdminDashboard = () => {
     if (error) {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } else {
-      // Send approval email
       await supabase.functions.invoke('send-email', {
         body: {
           to: email,
@@ -392,7 +475,6 @@ const AdminDashboard = () => {
       toast({ variant: 'destructive', title: 'Error', description: error.message });
     } else {
       await supabase.from('user_roles').upsert({ user_id: userId, role: 'student', is_approved: true }, { onConflict: 'user_id,role' });
-      // Send rejection email
       await supabase.functions.invoke('send-email', {
         body: {
           to: email,
@@ -405,20 +487,13 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDisableAccount = async (userId: string) => {
-    if (userId === currentUser?.id) {
-      toast({ variant: 'destructive', title: 'Error', description: 'You cannot disable your own account' });
-      return;
-    }
-    const { error } = await supabase.from('profiles').update({ is_disabled: true }).eq('user_id', userId);
-    if (error) {
-      toast({ variant: 'destructive', title: 'Error', description: error.message });
-    } else {
-      await fetchData();
-      toast({ title: 'Account disabled' });
-    }
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('ne-NP', {
+      style: 'currency',
+      currency: 'NPR',
+      minimumFractionDigits: 0,
+    }).format(price);
   };
-
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -478,7 +553,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -499,11 +574,20 @@ const AdminDashboard = () => {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Categories</CardTitle>
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.categories}</div>
+              <div className="text-2xl font-bold">{salesData.totalSales}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Commission Earned</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">{formatPrice(salesData.commissionEarned)}</div>
             </CardContent>
           </Card>
           <Card className={stats.pendingInstructors > 0 ? 'border-orange-200 bg-orange-50/50' : ''}>
@@ -520,7 +604,7 @@ const AdminDashboard = () => {
         </div>
 
         <Tabs defaultValue={stats.pendingInstructors > 0 ? 'approvals' : 'categories'} className="space-y-6">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="approvals" className="relative">
               Instructor Approvals
               {stats.pendingInstructors > 0 && (
@@ -532,6 +616,7 @@ const AdminDashboard = () => {
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="users">Users & Roles</TabsTrigger>
             <TabsTrigger value="courses">Courses</TabsTrigger>
+            <TabsTrigger value="sales">Sales & Payouts</TabsTrigger>
           </TabsList>
 
           <TabsContent value="approvals">
@@ -539,7 +624,7 @@ const AdminDashboard = () => {
               <CardHeader>
                 <CardTitle>Pending Instructor Approvals</CardTitle>
                 <CardDescription>
-                  Review and approve new instructor registrations. Instructors need approval before they can create courses.
+                  Review and approve new instructor registrations. Click on an instructor to view their details.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -550,10 +635,8 @@ const AdminDashboard = () => {
                     ))}
                   </div>
                 ) : pendingInstructors.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <UserCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium">No pending approvals</p>
-                    <p className="text-sm">All instructor requests have been processed.</p>
+                  <div className="text-center py-8 text-muted-foreground">
+                    No pending instructor approvals.
                   </div>
                 ) : (
                   <Table>
@@ -561,15 +644,18 @@ const AdminDashboard = () => {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Requested On</TableHead>
+                        <TableHead>Applied</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {pendingInstructors.map((instructor) => (
                         <TableRow key={instructor.user_id}>
-                          <TableCell className="font-medium">
-                            {instructor.full_name || 'Unnamed User'}
+                          <TableCell 
+                            className="font-medium cursor-pointer hover:text-primary"
+                            onClick={() => setSelectedInstructor(instructor)}
+                          >
+                            {instructor.full_name || 'Unnamed'}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             {instructor.email}
@@ -579,21 +665,23 @@ const AdminDashboard = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setSelectedInstructor(instructor)}>
-                                <Eye className="h-4 w-4 mr-1" /> View Details
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedInstructor(instructor)}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
                               </Button>
                               <Button
-                                variant="default"
                                 size="sm"
                                 onClick={() => handleApproveInstructor(instructor.user_id, instructor.email, instructor.full_name)}
-                                className="bg-green-600 hover:bg-green-700"
                               >
-                                <UserCheck className="h-4 w-4 mr-1" /> Approve
+                                Approve
                               </Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                  <Button variant="destructive" size="sm">
-                                    <UserX className="h-4 w-4 mr-1" />
+                                  <Button size="sm" variant="destructive">
                                     Reject
                                   </Button>
                                 </AlertDialogTrigger>
@@ -601,13 +689,12 @@ const AdminDashboard = () => {
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Reject Instructor Request</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      Are you sure you want to reject {instructor.full_name || instructor.email}'s instructor request? 
-                                      They will be set to a student role.
+                                      Are you sure you want to reject {instructor.full_name || instructor.email}'s instructor request?
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction 
+                                    <AlertDialogAction
                                       onClick={() => handleRejectInstructor(instructor.user_id, instructor.email, instructor.full_name)}
                                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                     >
@@ -681,7 +768,7 @@ const AdminDashboard = () => {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Category</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete "{category.name}"? Courses in this category will be unassigned.
+                                  Are you sure you want to delete "{category.name}"?
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -705,7 +792,7 @@ const AdminDashboard = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Users & Roles</CardTitle>
-                <CardDescription>Manage user roles and permissions</CardDescription>
+                <CardDescription>Manage user roles and account status. Each user has one primary role.</CardDescription>
               </CardHeader>
               <CardContent>
                 {loading ? (
@@ -724,13 +811,14 @@ const AdminDashboard = () => {
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>Roles</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {users.map((user) => (
-                        <TableRow key={user.user_id}>
+                        <TableRow key={user.user_id} className={user.is_disabled ? 'opacity-50' : ''}>
                           <TableCell className="font-medium">
                             {user.full_name || 'Unnamed User'}
                           </TableCell>
@@ -738,68 +826,65 @@ const AdminDashboard = () => {
                             {user.email || 'No email'}
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-1 flex-wrap">
-                              {user.roles.length === 0 ? (
-                                <Badge variant="outline">No roles</Badge>
-                              ) : (
-                                user.roles.map((role) => (
-                                  <Badge key={role} variant="secondary" className="capitalize">
-                                    {role}
-                                  </Badge>
-                                ))
-                              )}
-                            </div>
+                            <Select
+                              value={user.role}
+                              onValueChange={(value) => handleChangeRole(user.user_id, value)}
+                              disabled={user.user_id === currentUser?.id}
+                            >
+                              <SelectTrigger className="w-[130px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="student">Student</SelectItem>
+                                <SelectItem value="instructor">Instructor</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            {user.is_disabled ? (
+                              <Badge variant="destructive">Disabled</Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Active</Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {!user.roles.includes('instructor') && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleAssignRole(user.user_id, 'instructor')}
-                                >
-                                  <Shield className="h-4 w-4 mr-1" />
-                                  Make Instructor
-                                </Button>
-                              )}
-                              {user.roles.includes('instructor') && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveRole(user.user_id, 'instructor')}
-                                >
-                                  Remove Instructor
-                                </Button>
-                              )}
-                              {!user.roles.includes('admin') && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleAssignRole(user.user_id, 'admin')}
-                                >
-                                  Make Admin
-                                </Button>
-                              )}
-                              {user.roles.includes('admin') && user.user_id !== currentUser?.id && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveRole(user.user_id, 'admin')}
-                                >
-                                  Remove Admin
-                                </Button>
-                              )}
-                              {(user.roles.includes('admin') || user.roles.includes('instructor')) && user.user_id !== currentUser?.id && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleMakeStudent(user.user_id)}
-                                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                                >
-                                  Make Student
-                                </Button>
-                              )}
-                            </div>
+                            {user.user_id !== currentUser?.id && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant={user.is_disabled ? 'outline' : 'ghost'}
+                                    size="sm"
+                                  >
+                                    {user.is_disabled ? (
+                                      <>Enable</>
+                                    ) : (
+                                      <><Ban className="h-4 w-4 mr-1" /> Disable</>
+                                    )}
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      {user.is_disabled ? 'Enable Account' : 'Disable Account'}
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      {user.is_disabled
+                                        ? `Are you sure you want to enable ${user.full_name || user.email}'s account?`
+                                        : `Are you sure you want to disable ${user.full_name || user.email}'s account? They will not be able to log in.`}
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleToggleDisable(user.user_id, user.is_disabled)}
+                                    >
+                                      {user.is_disabled ? 'Enable' : 'Disable'}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -843,16 +928,11 @@ const AdminDashboard = () => {
                         <TableRow key={course.id}>
                           <TableCell className="font-medium">
                             {course.title}
-                            {course.last_edited_by && (
-                              <p className="text-xs text-muted-foreground">
-                                Last edited by admin
-                              </p>
-                            )}
                           </TableCell>
                           <TableCell>{course.instructor_name}</TableCell>
                           <TableCell>{getStatusBadge(course.status)}</TableCell>
                           <TableCell>
-                            {course.price === 0 ? 'Free' : `NPR ${course.price}`}
+                            {course.price === 0 ? 'Free' : formatPrice(course.price)}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -876,6 +956,86 @@ const AdminDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="sales">
+            <div className="space-y-6">
+              {/* Sales Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{formatPrice(salesData.totalRevenue)}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Platform Commission ({commissionPercentage}%)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">{formatPrice(salesData.commissionEarned)}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Instructor Payouts Due</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-orange-600">
+                      {formatPrice(salesData.instructorPayouts.reduce((acc, i) => acc + i.pending, 0))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Instructor Payouts Table */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Instructor Payouts</CardTitle>
+                  <CardDescription>Amount owed to each instructor after commission deduction</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {salesData.instructorPayouts.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No sales data available yet.
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Instructor</TableHead>
+                          <TableHead className="text-right">Total Sales</TableHead>
+                          <TableHead className="text-right">Commission Paid</TableHead>
+                          <TableHead className="text-right">Net Earnings</TableHead>
+                          <TableHead className="text-right">Already Paid</TableHead>
+                          <TableHead className="text-right">Pending Payout</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {salesData.instructorPayouts.map((instructor) => (
+                          <TableRow key={instructor.instructor_id}>
+                            <TableCell className="font-medium">{instructor.instructor_name}</TableCell>
+                            <TableCell className="text-right">{formatPrice(instructor.totalEarned)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatPrice(instructor.commissionPaid)}</TableCell>
+                            <TableCell className="text-right">{formatPrice(instructor.netEarnings)}</TableCell>
+                            <TableCell className="text-right text-green-600">{formatPrice(instructor.paidOut)}</TableCell>
+                            <TableCell className="text-right">
+                              {instructor.pending > 0 ? (
+                                <Badge className="bg-orange-100 text-orange-800">{formatPrice(instructor.pending)}</Badge>
+                              ) : (
+                                <Badge variant="outline">Settled</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -918,6 +1078,20 @@ const AdminDashboard = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Instructor Details Dialog */}
+        <InstructorDetailsDialog
+          instructor={selectedInstructor}
+          onClose={() => setSelectedInstructor(null)}
+          onApprove={(userId, email, name) => {
+            handleApproveInstructor(userId, email, name);
+            setSelectedInstructor(null);
+          }}
+          onReject={(userId, email, name) => {
+            handleRejectInstructor(userId, email, name);
+            setSelectedInstructor(null);
+          }}
+        />
       </div>
     </MainLayout>
   );
