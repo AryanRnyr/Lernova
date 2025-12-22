@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, BookOpen, Users, DollarSign, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, BookOpen, Users, DollarSign, Eye, Edit, Trash2, TrendingUp, Percent, Wallet } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,19 +34,35 @@ interface Course {
   enrollments: { count: number }[];
 }
 
+interface EarningsData {
+  totalRevenue: number;
+  totalEarnings: number;
+  commissionPaid: number;
+  commissionPercentage: number;
+  pendingPayout: number;
+}
+
 const InstructorDashboard = () => {
   const { user } = useAuth();
   const { isInstructor, isAdmin, isPendingInstructor, loading: roleLoading } = useUserRole();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ totalCourses: 0, totalStudents: 0, totalEarnings: 0 });
+  const [stats, setStats] = useState({ totalCourses: 0, totalStudents: 0 });
+  const [earnings, setEarnings] = useState<EarningsData>({
+    totalRevenue: 0,
+    totalEarnings: 0,
+    commissionPaid: 0,
+    commissionPercentage: 20,
+    pendingPayout: 0,
+  });
   const { toast } = useToast();
 
   useEffect(() => {
     if (!user) return;
 
-    const fetchCourses = async () => {
-      const { data, error } = await supabase
+    const fetchData = async () => {
+      // Fetch courses
+      const { data: coursesData, error } = await supabase
         .from('courses')
         .select(`
           id,
@@ -64,22 +80,61 @@ const InstructorDashboard = () => {
 
       if (error) {
         console.error('Error fetching courses:', error);
-      } else if (data) {
-        setCourses(data as unknown as Course[]);
+      } else if (coursesData) {
+        setCourses(coursesData as unknown as Course[]);
         
-        const totalStudents = data.reduce((acc, course: any) => 
+        const totalStudents = coursesData.reduce((acc, course: any) => 
           acc + (course.enrollments?.[0]?.count || 0), 0);
         
         setStats({
-          totalCourses: data.length,
+          totalCourses: coursesData.length,
           totalStudents,
-          totalEarnings: 0, // Will calculate from orders later
         });
       }
+
+      // Fetch commission percentage
+      const { data: settingsData } = await supabase
+        .from('platform_settings')
+        .select('setting_value')
+        .eq('setting_key', 'commission_percentage')
+        .single();
+
+      const commissionPercentage = settingsData ? parseFloat(settingsData.setting_value) : 20;
+
+      // Fetch completed orders for this instructor's courses
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('amount, course_id, courses!inner(instructor_id)')
+        .eq('status', 'completed')
+        .eq('courses.instructor_id', user.id);
+
+      // Calculate earnings
+      const totalRevenue = ordersData?.reduce((acc, order) => acc + (order.amount || 0), 0) || 0;
+      const commissionPaid = totalRevenue * (commissionPercentage / 100);
+      const totalEarnings = totalRevenue - commissionPaid;
+
+      // Fetch already paid out amounts
+      const { data: payoutsData } = await supabase
+        .from('payout_requests')
+        .select('amount')
+        .eq('instructor_id', user.id)
+        .eq('status', 'completed');
+
+      const paidOut = payoutsData?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
+      const pendingPayout = totalEarnings - paidOut;
+
+      setEarnings({
+        totalRevenue,
+        totalEarnings,
+        commissionPaid,
+        commissionPercentage,
+        pendingPayout: Math.max(0, pendingPayout),
+      });
+
       setLoading(false);
     };
 
-    fetchCourses();
+    fetchData();
   }, [user]);
 
   const handleDelete = async (courseId: string) => {
@@ -184,7 +239,7 @@ const InstructorDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Courses</CardTitle>
@@ -205,14 +260,56 @@ const InstructorDashboard = () => {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
+              <CardTitle className="text-sm font-medium">Your Earnings</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatPrice(stats.totalEarnings)}</div>
+              <div className="text-2xl font-bold text-green-600">{formatPrice(earnings.totalEarnings)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                After {earnings.commissionPercentage}% platform commission
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Available for Payout</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatPrice(earnings.pendingPayout)}</div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Earnings Breakdown */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Earnings Breakdown
+            </CardTitle>
+            <CardDescription>Your revenue and commission details</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Total Revenue</p>
+                <p className="text-xl font-semibold">{formatPrice(earnings.totalRevenue)}</p>
+              </div>
+              <div className="p-4 bg-destructive/10 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1">
+                  <Percent className="h-3 w-3" />
+                  Platform Commission ({earnings.commissionPercentage}%)
+                </p>
+                <p className="text-xl font-semibold text-destructive">{formatPrice(earnings.commissionPaid)}</p>
+              </div>
+              <div className="p-4 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Your Net Earnings</p>
+                <p className="text-xl font-semibold text-green-600 dark:text-green-400">{formatPrice(earnings.totalEarnings)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Courses List */}
         <Card>

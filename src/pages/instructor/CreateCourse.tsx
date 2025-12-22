@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CourseForm } from '@/components/instructor/CourseForm';
@@ -8,13 +8,32 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Percent, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const CreateCourse = () => {
   const { user } = useAuth();
   const { isInstructor, isAdmin, isPendingInstructor, loading: roleLoading } = useUserRole();
   const [loading, setLoading] = useState(false);
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(20);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const fetchCommission = async () => {
+      const { data } = await supabase
+        .from('platform_settings')
+        .select('setting_value')
+        .eq('setting_key', 'commission_percentage')
+        .single();
+      
+      if (data) {
+        setCommissionPercentage(parseFloat(data.setting_value));
+      }
+    };
+    fetchCommission();
+  }, []);
 
   const generateSlug = (title: string) => {
     return title
@@ -110,9 +129,19 @@ const CreateCourse = () => {
     <MainLayout>
       <div className="container py-8 max-w-3xl">
         <h1 className="text-3xl font-bold mb-2">Create New Course</h1>
-        <p className="text-muted-foreground mb-8">
+        <p className="text-muted-foreground mb-6">
           Fill in the details below to create your course
         </p>
+
+        {/* Commission Info Alert */}
+        <Alert className="mb-6 border-primary/20 bg-primary/5">
+          <Percent className="h-4 w-4" />
+          <AlertTitle>Platform Commission</AlertTitle>
+          <AlertDescription>
+            A <span className="font-semibold">{commissionPercentage}%</span> platform commission will be deducted from your course sales. 
+            For example, if you price your course at NPR 1000, you'll receive NPR {1000 - (1000 * commissionPercentage / 100)} per sale.
+          </AlertDescription>
+        </Alert>
 
         <CourseForm onSubmit={handleSubmit} loading={loading} />
       </div>
