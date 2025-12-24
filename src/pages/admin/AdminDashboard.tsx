@@ -411,8 +411,7 @@ const AdminDashboard = () => {
     // Insert new role
     const { error } = await supabase.from('user_roles').insert({
       user_id: userId,
-      role: newRole,
-      is_approved: true,
+      role: newRole as 'admin' | 'instructor' | 'student',
     });
 
     if (error) {
@@ -1080,18 +1079,15 @@ const AdminDashboard = () => {
         </Dialog>
 
         {/* Instructor Details Dialog */}
-        <InstructorDetailsDialog
-          instructor={selectedInstructor}
-          onClose={() => setSelectedInstructor(null)}
-          onApprove={(userId, email, name) => {
-            handleApproveInstructor(userId, email, name);
-            setSelectedInstructor(null);
-          }}
-          onReject={(userId, email, name) => {
-            handleRejectInstructor(userId, email, name);
-            setSelectedInstructor(null);
-          }}
-        />
+        {selectedInstructor && (
+          <InstructorDetailsDialog
+            open={!!selectedInstructor}
+            onOpenChange={(open) => !open && setSelectedInstructor(null)}
+            userId={selectedInstructor.user_id}
+            userName={selectedInstructor.full_name}
+            userEmail={selectedInstructor.email}
+          />
+        )}
       </div>
     </MainLayout>
   );
