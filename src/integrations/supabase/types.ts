@@ -324,6 +324,51 @@ export type Database = {
         }
         Relationships: []
       }
+      instructor_payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          instructor_id: string
+          notes: string | null
+          payment_method: string | null
+          payment_reference: string | null
+          period_end: string
+          period_start: string
+          processed_at: string | null
+          processed_by: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          instructor_id: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          period_end: string
+          period_start: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          instructor_id?: string
+          notes?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          period_end?: string
+          period_start?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -363,6 +408,7 @@ export type Database = {
       orders: {
         Row: {
           amount: number
+          commission_percentage: number | null
           course_id: string
           created_at: string
           id: string
@@ -375,6 +421,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          commission_percentage?: number | null
           course_id: string
           created_at?: string
           id?: string
@@ -387,6 +434,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          commission_percentage?: number | null
           course_id?: string
           created_at?: string
           id?: string

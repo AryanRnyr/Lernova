@@ -6,11 +6,24 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User, Mail, Phone, Briefcase, GraduationCap, FileText, Calendar } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { User, Mail, Phone, Briefcase, GraduationCap, FileText, Calendar, Check, X } from 'lucide-react';
 
 interface InstructorDetailsDialogProps {
   open: boolean;
@@ -18,6 +31,9 @@ interface InstructorDetailsDialogProps {
   userId: string;
   userName: string | null;
   userEmail: string;
+  isPending?: boolean;
+  onApprove?: (userId: string, email: string, name: string | null) => void;
+  onReject?: (userId: string, email: string, name: string | null) => void;
 }
 
 interface InstructorApplication {
@@ -29,6 +45,7 @@ interface InstructorApplication {
   resume_url: string | null;
   payment_method: string | null;
   account_name: string | null;
+  account_id: string | null;
   created_at: string;
 }
 
@@ -60,6 +77,9 @@ export const InstructorDetailsDialog = ({
   userId,
   userName,
   userEmail,
+  isPending = false,
+  onApprove,
+  onReject,
 }: InstructorDetailsDialogProps) => {
   const [loading, setLoading] = useState(true);
   const [application, setApplication] = useState<InstructorApplication | null>(null);
@@ -82,6 +102,20 @@ export const InstructorDetailsDialog = ({
     setApplication(applicationRes.data);
     setProfile(profileRes.data);
     setLoading(false);
+  };
+
+  const handleApprove = () => {
+    if (onApprove) {
+      onApprove(userId, userEmail, userName);
+      onOpenChange(false);
+    }
+  };
+
+  const handleReject = () => {
+    if (onReject) {
+      onReject(userId, userEmail, userName);
+      onOpenChange(false);
+    }
   };
 
   return (
@@ -223,6 +257,12 @@ export const InstructorDetailsDialog = ({
                           <p className="font-medium">{application.account_name}</p>
                         </div>
                       )}
+                      {application.account_id && (
+                        <div>
+                          <span className="text-muted-foreground">Account ID:</span>
+                          <p className="font-medium">{application.account_id}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -234,6 +274,42 @@ export const InstructorDetailsDialog = ({
               </div>
             )}
           </div>
+        )}
+
+        {/* Action buttons for pending instructors */}
+        {isPending && onApprove && onReject && (
+          <DialogFooter className="mt-6 gap-2 sm:gap-0">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">
+                  <X className="h-4 w-4 mr-2" />
+                  Reject Application
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Reject Instructor Application</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to reject {userName || userEmail}'s instructor application? They will be notified via email.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleReject}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Reject
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            
+            <Button onClick={handleApprove}>
+              <Check className="h-4 w-4 mr-2" />
+              Approve Instructor
+            </Button>
+          </DialogFooter>
         )}
       </DialogContent>
     </Dialog>
