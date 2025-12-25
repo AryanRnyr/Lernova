@@ -45,9 +45,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, UserMinus } from 'lucide-react';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InstructorDetailsDialog } from '@/components/admin/InstructorDetailsDialog';
+import { SalesPayoutsTab } from '@/components/admin/SalesPayoutsTab';
 
 interface Category {
   id: string;
@@ -958,83 +959,7 @@ const AdminDashboard = () => {
           </TabsContent>
 
           <TabsContent value="sales">
-            <div className="space-y-6">
-              {/* Sales Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{formatPrice(salesData.totalRevenue)}</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Platform Commission ({commissionPercentage}%)</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{formatPrice(salesData.commissionEarned)}</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Instructor Payouts Due</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-orange-600">
-                      {formatPrice(salesData.instructorPayouts.reduce((acc, i) => acc + i.pending, 0))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Instructor Payouts Table */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Instructor Payouts</CardTitle>
-                  <CardDescription>Amount owed to each instructor after commission deduction</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {salesData.instructorPayouts.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No sales data available yet.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Instructor</TableHead>
-                          <TableHead className="text-right">Total Sales</TableHead>
-                          <TableHead className="text-right">Commission Paid</TableHead>
-                          <TableHead className="text-right">Net Earnings</TableHead>
-                          <TableHead className="text-right">Already Paid</TableHead>
-                          <TableHead className="text-right">Pending Payout</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {salesData.instructorPayouts.map((instructor) => (
-                          <TableRow key={instructor.instructor_id}>
-                            <TableCell className="font-medium">{instructor.instructor_name}</TableCell>
-                            <TableCell className="text-right">{formatPrice(instructor.totalEarned)}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{formatPrice(instructor.commissionPaid)}</TableCell>
-                            <TableCell className="text-right">{formatPrice(instructor.netEarnings)}</TableCell>
-                            <TableCell className="text-right text-green-600">{formatPrice(instructor.paidOut)}</TableCell>
-                            <TableCell className="text-right">
-                              {instructor.pending > 0 ? (
-                                <Badge className="bg-orange-100 text-orange-800">{formatPrice(instructor.pending)}</Badge>
-                              ) : (
-                                <Badge variant="outline">Settled</Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+            <SalesPayoutsTab />
           </TabsContent>
         </Tabs>
 
@@ -1086,6 +1011,9 @@ const AdminDashboard = () => {
             userId={selectedInstructor.user_id}
             userName={selectedInstructor.full_name}
             userEmail={selectedInstructor.email}
+            isPending={true}
+            onApprove={handleApproveInstructor}
+            onReject={handleRejectInstructor}
           />
         )}
       </div>

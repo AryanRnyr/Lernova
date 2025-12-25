@@ -16,6 +16,8 @@ import CourseDetail from "./pages/CourseDetail";
 import InstructorDashboard from "./pages/instructor/InstructorDashboard";
 import CreateCourse from "./pages/instructor/CreateCourse";
 import EditCourse from "./pages/instructor/EditCourse";
+import InstructorPayouts from "./pages/instructor/InstructorPayouts";
+import InstructorSettings from "./pages/instructor/InstructorSettings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminSettings from "./pages/admin/AdminSettings";
 import StudentDashboard from "./pages/student/StudentDashboard";
@@ -59,6 +61,8 @@ const App = () => (
             <Route path="/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/courses/new" element={<CreateCourse />} />
             <Route path="/instructor/courses/:id/edit" element={<EditCourse />} />
+            <Route path="/instructor/payouts" element={<InstructorPayouts />} />
+            <Route path="/instructor/settings" element={<InstructorSettings />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="*" element={<NotFound />} />
