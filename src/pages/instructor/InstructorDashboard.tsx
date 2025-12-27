@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, BookOpen, Users, DollarSign, Eye, Edit, Trash2, TrendingUp, Percent, Wallet } from 'lucide-react';
+import { Plus, BookOpen, Users, DollarSign, Eye, Edit, Trash2, TrendingUp, Percent, Wallet, Settings } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -230,12 +230,26 @@ const InstructorDashboard = () => {
             <h1 className="text-3xl font-bold">Instructor Dashboard</h1>
             <p className="text-muted-foreground">Manage your courses and track performance</p>
           </div>
-          <Button asChild>
-            <Link to="/instructor/courses/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Course
-            </Link>
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" asChild>
+              <Link to="/instructor/payouts">
+                <Wallet className="mr-2 h-4 w-4" />
+                Payouts
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/instructor/settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to="/instructor/courses/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Create Course
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
