@@ -145,11 +145,32 @@ const InstructorPayouts = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <Badge className="bg-green-100 text-green-800 inline-flex items-center"><Check className="h-3 w-3 mr-1" /><span>Completed</span></Badge>;
+        return (
+          <Badge className="bg-green-100 text-green-800">
+            <span className="flex items-center gap-1">
+              <Check className="h-3 w-3" />
+              Completed
+            </span>
+          </Badge>
+        );
       case 'processing':
-        return <Badge className="bg-blue-100 text-blue-800 inline-flex items-center"><Clock className="h-3 w-3 mr-1" /><span>Processing</span></Badge>;
+        return (
+          <Badge className="bg-blue-100 text-blue-800">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Processing
+            </span>
+          </Badge>
+        );
       case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 inline-flex items-center"><Clock className="h-3 w-3 mr-1" /><span>Pending</span></Badge>;
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Pending
+            </span>
+          </Badge>
+        );
       case 'failed':
         return <Badge variant="destructive">Failed</Badge>;
       default:
