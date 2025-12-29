@@ -20,6 +20,7 @@ import InstructorPayouts from "./pages/instructor/InstructorPayouts";
 import InstructorSettings from "./pages/instructor/InstructorSettings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminMessages from "./pages/admin/AdminMessages";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import CourseLearning from "./pages/student/CourseLearning";
 import MyReviews from "./pages/student/MyReviews";
@@ -57,6 +58,7 @@ const App = () => (
             <Route path="/profile" element={<Profile />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
+            <Route path="/payment/success" element={<PaymentSuccess />} />
             <Route path="/payment/failure" element={<PaymentFailure />} />
             <Route path="/instructor" element={<InstructorDashboard />} />
             <Route path="/instructor/courses/new" element={<CreateCourse />} />
@@ -64,6 +66,7 @@ const App = () => (
             <Route path="/instructor/payouts" element={<InstructorPayouts />} />
             <Route path="/instructor/settings" element={<InstructorSettings />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/messages" element={<AdminMessages />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

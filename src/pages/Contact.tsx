@@ -6,31 +6,71 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { Mail, Phone, MapPin, Send, Loader2 } from 'lucide-react';
+import { z } from 'zod';
+
+const contactSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
+  message: z.string().trim().min(1, "Message is required").max(2000, "Message must be less than 2000 characters"),
+});
 
 const Contact = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; email?: string; message?: string }>({});
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate input
+    const result = contactSchema.safeParse({ name, email, message });
+    if (!result.success) {
+      const fieldErrors: { name?: string; email?: string; message?: string } = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as 'name' | 'email' | 'message'] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
     setLoading(true);
 
-    // Simulate form submission
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const { error } = await supabase
+        .from('contact_messages')
+        .insert({
+          name: result.data.name,
+          email: result.data.email,
+          message: result.data.message,
+        });
 
-    toast({
-      title: 'Message sent!',
-      description: "We'll get back to you as soon as possible.",
-    });
+      if (error) throw error;
 
-    setName('');
-    setEmail('');
-    setMessage('');
-    setLoading(false);
+      toast({
+        title: 'Message sent!',
+        description: "We'll get back to you as soon as possible.",
+      });
+
+      setName('');
+      setEmail('');
+      setMessage('');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send message. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -109,8 +149,9 @@ const Contact = () => {
                         placeholder="Your name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        required
+                        className={errors.name ? 'border-destructive' : ''}
                       />
+                      {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
@@ -120,8 +161,9 @@ const Contact = () => {
                         placeholder="your@email.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        required
+                        className={errors.email ? 'border-destructive' : ''}
                       />
+                      {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -132,8 +174,9 @@ const Contact = () => {
                       rows={6}
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
-                      required
+                      className={errors.message ? 'border-destructive' : ''}
                     />
+                    {errors.message && <p className="text-sm text-destructive">{errors.message}</p>}
                   </div>
                   <Button type="submit" disabled={loading}>
                     {loading ? (
