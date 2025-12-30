@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
-import { GraduationCap, Facebook, Twitter, Instagram, Linkedin } from 'lucide-react';
+import { Link } from "react-router-dom";
+import { GraduationCap, Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
 
 export const Footer = () => {
   return (
@@ -54,7 +54,7 @@ export const Footer = () => {
           </div>
 
           {/* For Instructors */}
-          <div>
+          {/* <div>
             <h4 className="font-semibold mb-4">For Instructors</h4>
             <ul className="space-y-2 text-sm">
               <li>
@@ -68,7 +68,7 @@ export const Footer = () => {
                 </Link>
               </li>
             </ul>
-          </div>
+          </div> */}
 
           {/* Support */}
           <div>
