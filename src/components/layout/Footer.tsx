@@ -31,6 +31,23 @@ export const Footer = () => {
             </div>
           </div>
 
+          {/* For Instructors */}
+          <div>
+            {/* <h4 className="font-semibold mb-4">For Instructors</h4>
+            <ul className="space-y-2 text-sm">
+              <li>
+                <Link to="/signup" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Become an Instructor
+                </Link>
+              </li>
+              <li>
+                <Link to="/instructor" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Instructor Dashboard
+                </Link>
+              </li>
+            </ul> */}
+          </div>
+
           {/* Quick Links */}
           <div>
             <h4 className="font-semibold mb-4">Quick Links</h4>
@@ -52,23 +69,6 @@ export const Footer = () => {
               </li>
             </ul>
           </div>
-
-          {/* For Instructors */}
-          {/* <div>
-            <h4 className="font-semibold mb-4">For Instructors</h4>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/signup" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Become an Instructor
-                </Link>
-              </li>
-              <li>
-                <Link to="/instructor" className="text-muted-foreground hover:text-foreground transition-colors">
-                  Instructor Dashboard
-                </Link>
-              </li>
-            </ul>
-          </div> */}
 
           {/* Support */}
           <div>
