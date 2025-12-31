@@ -23,10 +23,15 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
+    // User client for authentication
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } }
     });
+    
+    // Admin client for operations that bypass RLS
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
@@ -92,11 +97,18 @@ serve(async (req) => {
       throw new Error(khaltiData.detail || 'Khalti payment initiation failed');
     }
 
-    // Update order with Khalti pidx
-    await supabase
+    // Update order with Khalti pidx using admin client to bypass RLS
+    const { error: updateError } = await supabaseAdmin
       .from('orders')
       .update({ payment_reference: khaltiData.pidx })
       .eq('id', order.id);
+    
+    if (updateError) {
+      console.error('Failed to update order with pidx:', updateError);
+      throw new Error('Failed to save payment reference');
+    }
+    
+    console.log('Order updated successfully with pidx:', khaltiData.pidx);
 
     return new Response(JSON.stringify({
       success: true,

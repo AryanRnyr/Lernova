@@ -93,11 +93,19 @@ const Checkout = () => {
         ? 'initiate-esewa-payment' 
         : 'initiate-khalti-payment';
 
+      const origin = window.location.origin;
+      // Use base URLs without query parameters - payment gateways will append their data
+      // We'll rely on sessionStorage to track the payment method
+      const successUrl = `${origin}/payment/success`;
+      const failureUrl = `${origin}/payment/failure`;
+
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: {
           courseId: course.id,
           amount: course.price,
           courseName: course.title,
+          successUrl,
+          failureUrl,
         },
       });
 
@@ -106,6 +114,9 @@ const Checkout = () => {
       if (!data.success) {
         throw new Error(data.error || 'Payment initiation failed');
       }
+
+      // Store payment method for recovery if needed
+      sessionStorage.setItem('paymentMethod', paymentMethod);
 
       if (paymentMethod === 'esewa') {
         // Create and submit eSewa form
@@ -124,6 +135,10 @@ const Checkout = () => {
         document.body.appendChild(form);
         form.submit();
       } else {
+        // Store Khalti pidx for recovery if needed
+        if (data.pidx) {
+          sessionStorage.setItem('khaltiPidx', data.pidx);
+        }
         // Redirect to Khalti payment page
         window.location.href = data.paymentUrl;
       }
