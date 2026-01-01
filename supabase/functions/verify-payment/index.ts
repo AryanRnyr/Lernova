@@ -190,6 +190,8 @@ serve(async (req) => {
 
       // If pidx is provided, verify with Khalti API
       let khaltiVerified = false;
+      let lookupData: any = null;
+      
       if (pidx) {
         const lookupResponse = await fetch(KHALTI_LOOKUP_URL, {
           method: 'POST',
@@ -200,7 +202,7 @@ serve(async (req) => {
           body: JSON.stringify({ pidx }),
         });
 
-        const lookupData = await lookupResponse.json();
+        lookupData = await lookupResponse.json();
 
         console.log('Khalti lookup response:', { status: lookupResponse.status, data: lookupData });
 
@@ -282,7 +284,7 @@ serve(async (req) => {
         .from('orders')
         .update({ 
           status: 'completed',
-          payment_reference: lookupData.transaction_id || pidx,
+          payment_reference: (lookupData?.transaction_id) || pidx || 'khalti-payment',
         })
         .eq('id', order.id);
 

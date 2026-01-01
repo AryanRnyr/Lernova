@@ -114,7 +114,23 @@ const PaymentSuccess = () => {
           },
         });
 
-        if (error) throw error;
+        console.log('Backend response:', { data, error });
+
+        if (error) {
+          // Try to extract error details from the response
+          if (error.context && error.context instanceof Response) {
+            const errorText = await error.context.text();
+            console.error('Error response text:', errorText);
+            try {
+              const errorJson = JSON.parse(errorText);
+              console.error('Parsed error:', errorJson);
+              throw new Error(errorJson.error || error.message);
+            } catch (e) {
+              throw new Error(errorText || error.message);
+            }
+          }
+          throw error;
+        }
 
         if (data.success) {
           setStatus('success');
@@ -123,6 +139,7 @@ const PaymentSuccess = () => {
           // Clear session storage on success
           sessionStorage.removeItem('paymentMethod');
         } else {
+          console.error('Backend error:', data.error);
           throw new Error(data.error || 'Payment verification failed');
         }
 
