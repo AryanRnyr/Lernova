@@ -227,6 +227,7 @@ serve(async (req) => {
       let order;
       
       if (pidx) {
+        // Try to find by payment_reference first
         const { data: orderByRef, error: orderError1 } = await supabaseAdmin
           .from('orders')
           .select('*')
@@ -234,11 +235,28 @@ serve(async (req) => {
           .eq('user_id', user.id)
           .single();
 
+        console.log('Order lookup by pidx:', { found: !!orderByRef, error: orderError1?.message, pidx, userId: user.id });
+
         if (orderByRef) {
           order = orderByRef;
           console.log('Order found by pidx:', order.id);
         } else {
-          console.warn('Order not found by pidx, trying by user_id and pending status', { pidx, userId: user.id, error: orderError1 });
+          console.warn('Order not found by pidx, trying by user_id and pending status');
+          
+          // DEBUG: Check all pending orders for this user
+          const { data: allPending, error: allPendingError } = await supabaseAdmin
+            .from('orders')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending');
+          
+          console.log('DEBUG - All pending orders for user:', { 
+            userId: user.id, 
+            count: allPending?.length || 0,
+            orders: allPending?.map(o => ({ id: o.id, payment_reference: o.payment_reference, created_at: o.created_at })) || [],
+            error: allPendingError?.message
+          });
+          
           // Fallback: find the most recent pending order for this user
           const { data: orderByUser, error: orderError2 } = await supabaseAdmin
             .from('orders')
@@ -249,12 +267,14 @@ serve(async (req) => {
             .limit(1)
             .single();
 
+          console.log('Order lookup by user+status:', { found: !!orderByUser, error: orderError2?.message });
+
           if (orderByUser) {
             order = orderByUser;
             console.log('Order found by user and status:', order.id);
           } else {
-            console.error('Order lookup errors:', { orderError1, orderError2 });
-            throw new Error(`Order not found for user ${user.id}`);
+            console.error('Order lookup errors:', { orderError1: orderError1?.message, orderError2: orderError2?.message });
+            throw new Error(`Order not found for user ${user.id}. Errors: ${orderError1?.message}, ${orderError2?.message}`);
           }
         }
       } else {
@@ -269,13 +289,15 @@ serve(async (req) => {
           .limit(1)
           .single();
 
+        console.log('Order lookup result:', { found: !!orderByUser, error: orderError?.message });
+
         if (orderByUser) {
           order = orderByUser;
           console.log('Order found by user and status:', order.id);
           pidx = orderByUser.payment_reference; // Get the pidx from the order if available
         } else {
           console.error('Order not found:', orderError);
-          throw new Error(`No pending order found for user ${user.id}`);
+          throw new Error(`No pending order found for user ${user.id}. Error: ${orderError?.message}`);
         }
       }
 
