@@ -184,9 +184,9 @@ serve(async (req) => {
       // Verify Khalti payment
       console.log('Khalti payment data received:', paymentData);
       
-      const { pidx } = paymentData;
+      const { pidx, purchaseOrderId } = paymentData;
 
-      console.log('Khalti pidx:', pidx);
+      console.log('Khalti pidx and purchaseOrderId:', { pidx, purchaseOrderId });
 
       // If pidx is provided, verify with Khalti API
       let khaltiVerified = false;
@@ -226,7 +226,26 @@ serve(async (req) => {
       // Find order by payment_reference (pidx) if available, or by recent pending order
       let order;
       
-      if (pidx) {
+      // First priority: Use purchase_order_id if provided (most reliable)
+      if (purchaseOrderId) {
+        console.log('Trying to find order by purchase_order_id:', purchaseOrderId);
+        const { data: orderById, error: orderErrorById } = await supabaseAdmin
+          .from('orders')
+          .select('*')
+          .eq('id', purchaseOrderId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (orderById) {
+          order = orderById;
+          console.log('Order found by purchase_order_id:', order.id);
+        } else {
+          console.warn('Order not found by purchase_order_id:', { purchaseOrderId, error: orderErrorById?.message });
+        }
+      }
+      
+      // Second priority: Try pidx if order not found yet
+      if (!order && pidx) {
         // Try to find by payment_reference first
         const { data: orderByRef, error: orderError1 } = await supabaseAdmin
           .from('orders')

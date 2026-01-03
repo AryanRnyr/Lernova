@@ -83,9 +83,11 @@ const PaymentSuccess = () => {
         } else if (method === 'khalti') {
           // Khalti returns pidx and other params in URL
           let pidx = searchParams.get('pidx');
+          const purchaseOrderId = searchParams.get('purchase_order_id');
           
           console.log('Khalti payment params from URL:', { 
             pidx,
+            purchaseOrderId,
             allParams: Array.from(searchParams.entries()).reduce((acc, [key, val]) => ({ ...acc, [key]: val }), {})
           });
           
@@ -99,7 +101,7 @@ const PaymentSuccess = () => {
             pidx = sessionStorage.getItem('khaltiPidx');
           }
           
-          paymentData = pidx ? { pidx } : {};
+          paymentData = { pidx, purchaseOrderId };
         } else {
           throw new Error(`Invalid payment method: ${method}`);
         }
