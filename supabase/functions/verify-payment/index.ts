@@ -11,7 +11,7 @@ const corsHeaders = {
 const ESEWA_SECRET_KEY = "8gBm/:&EnhH.1/q";
 
 // Khalti Configuration
-const KHALTI_SECRET_KEY = "live_secret_key_68791341fdd94846a146f0457ff7b455";
+const KHALTI_SECRET_KEY = "58cdd238e8394b71ae1e51aa1505c09d";
 const KHALTI_LOOKUP_URL = "https://a.khalti.com/api/v2/epayment/lookup/";
 
 async function verifyEsewaSignature(message: string, signature: string, secretKey: string): Promise<boolean> {
@@ -196,7 +196,8 @@ serve(async (req) => {
         const lookupResponse = await fetch(KHALTI_LOOKUP_URL, {
           method: 'POST',
           headers: {
-            'Authorization': `Key ${KHALTI_SECRET_KEY}`,
+            // 'Authorization': `Key ${KHALTI_SECRET_KEY}`,
+            'Authorization': `Key 58cdd238e8394b71ae1e51aa1505c09d`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ pidx }),

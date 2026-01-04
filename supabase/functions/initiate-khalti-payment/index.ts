@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Khalti Sandbox Configuration
-const KHALTI_SECRET_KEY = "live_secret_key_68791341fdd94846a146f0457ff7b455";
+const KHALTI_SECRET_KEY = "58cdd238e8394b71ae1e51aa1505c09d";
 const KHALTI_INITIATE_URL = "https://a.khalti.com/api/v2/epayment/initiate/";
 
 serve(async (req) => {
@@ -68,24 +68,42 @@ serve(async (req) => {
 
     // Convert amount to paisa (Khalti expects amount in paisa)
     const amountInPaisa = Math.round(amount * 100);
-    const origin = req.headers.get('origin') || 'http://localhost:5173';
+    const origin = req.headers.get('origin') || 'http://localhost:8080';
+
+    console.log("KHALTI INITIATE PAYLOAD:", {
+  return_url: "http://localhost:8080/payment/success?method=khalti",
+  website_url: "http://localhost:8080",
+  amount: amountInPaisa,
+        purchase_order_id: order.id,
+        purchase_order_name: courseName || 'Course Purchase',
+        customer_info: {
+          name: user.user_metadata?.full_name || 'Customer',
+          email: user.email || 'NA',
+          phone: user.phone || 'NA',
+        },
+});
+
 
     // Initiate Khalti payment
     const khaltiResponse = await fetch(KHALTI_INITIATE_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Key ${KHALTI_SECRET_KEY}`,
+        // 'Authorization': `Key ${KHALTI_SECRET_KEY}`,
+        'Authorization': `Key 58cdd238e8394b71ae1e51aa1505c09d`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        return_url: successUrl || `${origin}/payment/success?method=khalti`,
-        website_url: origin,
+        // return_url: successUrl || `${origin}/payment/success?method=khalti`,
+        return_url: `http://localhost:8080/payment/success?method=khalti`,
+        // website_url: origin,
+        website_url: "http://localhost:8080",
         amount: amountInPaisa,
         purchase_order_id: order.id,
         purchase_order_name: courseName || 'Course Purchase',
         customer_info: {
           name: user.user_metadata?.full_name || 'Customer',
-          email: user.email,
+          email: user.email || 'NA',
+          phone: user.phone || 'NA',
         },
       }),
     });
