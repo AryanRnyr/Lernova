@@ -70,18 +70,7 @@ serve(async (req) => {
     const amountInPaisa = Math.round(amount * 100);
     const origin = req.headers.get('origin') || 'http://localhost:8080';
 
-    console.log("KHALTI INITIATE PAYLOAD:", {
-  return_url: "http://localhost:8080/payment/success?method=khalti",
-  website_url: "http://localhost:8080",
-  amount: amountInPaisa,
-        purchase_order_id: order.id,
-        purchase_order_name: courseName || 'Course Purchase',
-        customer_info: {
-          name: user.user_metadata?.full_name || 'Customer',
-          email: user.email || 'NA',
-          phone: user.phone || 'NA',
-        },
-});
+  
 
 
     // Initiate Khalti payment
@@ -120,6 +109,8 @@ serve(async (req) => {
       .from('orders')
       .update({ payment_reference: khaltiData.pidx })
       .eq('id', order.id);
+
+      
     
     if (updateError) {
       console.error('Failed to update order with pidx:', updateError);

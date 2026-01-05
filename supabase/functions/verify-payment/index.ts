@@ -270,12 +270,7 @@ serve(async (req) => {
             .eq('user_id', user.id)
             .eq('status', 'pending');
           
-          console.log('DEBUG - All pending orders for user:', { 
-            userId: user.id, 
-            count: allPending?.length || 0,
-            orders: allPending?.map(o => ({ id: o.id, payment_reference: o.payment_reference, created_at: o.created_at })) || [],
-            error: allPendingError?.message
-          });
+          
           
           // Fallback: find the most recent pending order for this user
           const { data: orderByUser, error: orderError2 } = await supabaseAdmin
@@ -314,7 +309,7 @@ serve(async (req) => {
         if (orderByUser) {
           order = orderByUser;
           console.log('Order found by user and status:', order.id);
-          pidx = orderByUser.payment_reference; // Get the pidx from the order if available
+          let pidx = orderByUser.payment_reference; // Get the pidx from the order if available
         } else {
           console.error('Order not found:', orderError);
           throw new Error(`No pending order found for user ${user.id}. Error: ${orderError?.message}`);
