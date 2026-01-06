@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // Khalti Sandbox Configuration
-const KHALTI_SECRET_KEY = "58cdd238e8394b71ae1e51aa1505c09d";
+const KHALTI_SECRET_KEY = Deno.env.get('KHALTI_SECRET_KEY') || "58cdd238e8394b71ae1e51aa1505c09d";
 const KHALTI_INITIATE_URL = "https://a.khalti.com/api/v2/epayment/initiate/";
 
 serve(async (req) => {

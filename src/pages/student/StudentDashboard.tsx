@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Clock, Award, PlayCircle, Download } from 'lucide-react';
+import { BookOpen, Clock, Award, PlayCircle, Download, Receipt } from 'lucide-react';
 import { CertificateGenerator } from '@/components/certificate/CertificateGenerator';
 import { CourseRecommendations } from '@/components/recommendations/CourseRecommendations';
 
@@ -253,9 +253,17 @@ const StudentDashboard = () => {
   return (
     <MainLayout>
       <div className="container py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold">My Learning</h1>
-          <p className="text-muted-foreground">Track your progress and continue learning</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">My Learning</h1>
+            <p className="text-muted-foreground">Track your progress and continue learning</p>
+          </div>
+          <Button variant="outline" asChild>
+            <Link to="/my-invoices">
+              <Receipt className="h-4 w-4 mr-2" />
+              My Invoices
+            </Link>
+          </Button>
         </div>
 
         {/* Stats Cards */}

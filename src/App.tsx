@@ -25,6 +25,8 @@ import StudentDashboard from "./pages/student/StudentDashboard";
 import CourseLearning from "./pages/student/CourseLearning";
 import MyReviews from "./pages/student/MyReviews";
 import ReviewCourse from "./pages/student/ReviewCourse";
+import StudentInvoices from "./pages/student/Invoices";
+import AdminInvoices from "./pages/admin/AdminInvoices";
 import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -67,7 +69,9 @@ const App = () => (
             <Route path="/instructor/settings" element={<InstructorSettings />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/messages" element={<AdminMessages />} />
+            <Route path="/admin/invoices" element={<AdminInvoices />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/my-invoices" element={<StudentInvoices />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
