@@ -44,6 +44,17 @@ serve(async (req) => {
       throw new Error('Missing required fields');
     }
 
+    // Validate user has required info for Khalti
+    if (!user.email) {
+      throw new Error('Email is required for Khalti payment');
+    }
+
+    console.log('User info for Khalti:', {
+      email: user.email,
+      phone: user.phone || user.user_metadata?.phone,
+      name: user.user_metadata?.full_name
+    });
+
     // Generate unique transaction UUID
     const transactionUuid = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -70,45 +81,61 @@ serve(async (req) => {
     const amountInPaisa = Math.round(amount * 100);
     const origin = req.headers.get('origin') || 'http://localhost:8080';
 
-  
-
+    console.log('Initiating Khalti payment:', {
+      amount: amountInPaisa,
+      orderId: order.id,
+      customerEmail: user.email
+    });
 
     // Initiate Khalti payment
     const khaltiResponse = await fetch(KHALTI_INITIATE_URL, {
       method: 'POST',
       headers: {
-        // 'Authorization': `Key ${KHALTI_SECRET_KEY}`,
-        'Authorization': `Key 58cdd238e8394b71ae1e51aa1505c09d`,
+        'Authorization': `Key ${KHALTI_SECRET_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // return_url: successUrl || `${origin}/payment/success?method=khalti`,
-        return_url: `http://localhost:8080/payment/success?method=khalti`,
-        // website_url: origin,
-        website_url: "http://localhost:8080",
+        return_url: `http://localhost:8080/payment/success`,
+        website_url: 'http://localhost:8080',
         amount: amountInPaisa,
         purchase_order_id: order.id,
         purchase_order_name: courseName || 'Course Purchase',
         customer_info: {
-          name: user.user_metadata?.full_name || 'Customer',
-          email: user.email || 'NA',
-          phone: user.phone || 'NA',
+          name: user.user_metadata?.full_name || user.email.split('@')[0],
+          email: user.email,
+          phone: user.phone || user.user_metadata?.phone || '9800000000',
         },
       }),
     });
 
     const khaltiData = await khaltiResponse.json();
 
+    console.log('Khalti API response:', { 
+      status: khaltiResponse.status, 
+      ok: khaltiResponse.ok,
+      data: khaltiData 
+    });
+
     if (!khaltiResponse.ok) {
       console.error('Khalti API error:', khaltiData);
       throw new Error(khaltiData.detail || 'Khalti payment initiation failed');
     }
 
+    // Check if pidx exists in response
+    if (!khaltiData.pidx) {
+      console.error('No pidx in Khalti response:', khaltiData);
+      throw new Error('Khalti did not return a payment ID (pidx)');
+    }
+
+    console.log('About to update order with pidx:', { orderId: order.id, pidx: khaltiData.pidx });
+
     // Update order with Khalti pidx using admin client to bypass RLS
-    const { error: updateError } = await supabaseAdmin
+    const { data: updatedOrder, error: updateError } = await supabaseAdmin
       .from('orders')
       .update({ payment_reference: khaltiData.pidx })
-      .eq('id', order.id);
+      .eq('id', order.id)
+      .select()
+      .single();
 
       
     
@@ -117,7 +144,23 @@ serve(async (req) => {
       throw new Error('Failed to save payment reference');
     }
     
-    console.log('Order updated successfully with pidx:', khaltiData.pidx);
+    console.log('Order update result:', { 
+      success: !updateError, 
+      orderId: updatedOrder?.id,
+      payment_reference: updatedOrder?.payment_reference,
+      pidx: khaltiData.pidx
+    });
+
+    // Verify the update worked
+    if (!updatedOrder || updatedOrder.payment_reference !== khaltiData.pidx) {
+      console.error('Update verification failed:', {
+        expected: khaltiData.pidx,
+        actual: updatedOrder?.payment_reference
+      });
+      throw new Error('Payment reference was not saved correctly');
+    }
+    
+    console.log('✓ Order updated successfully with pidx:', khaltiData.pidx);
 
     return new Response(JSON.stringify({
       success: true,
