@@ -45,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, MessageSquare } from 'lucide-react';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, MessageSquare, Receipt } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InstructorDetailsDialog } from '@/components/admin/InstructorDetailsDialog';
 import { SalesPayoutsTab } from '@/components/admin/SalesPayoutsTab';
@@ -550,6 +550,9 @@ const AdminDashboard = () => {
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link to="/admin/messages"><MessageSquare className="h-4 w-4 mr-2" /> Messages</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/admin/invoices"><Receipt className="h-4 w-4 mr-2" /> Invoices</Link>
             </Button>
             <Button asChild>
               <Link to="/admin/settings"><Settings className="h-4 w-4 mr-2" /> Settings</Link>
