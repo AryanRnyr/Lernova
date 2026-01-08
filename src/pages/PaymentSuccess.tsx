@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle2, Loader2, XCircle, BookOpen } from 'lucide-react';
 
+
+
 const PaymentSuccess = () => {
   const { user, session } = useAuth();
   const [searchParams] = useSearchParams();
