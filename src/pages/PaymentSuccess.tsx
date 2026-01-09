@@ -16,8 +16,12 @@ const PaymentSuccess = () => {
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [message, setMessage] = useState('');
   const [courseId, setCourseId] = useState<string | null>(null);
+  const [hasVerified, setHasVerified] = useState(false);
 
   useEffect(() => {
+    // Prevent multiple verification attempts
+    if (hasVerified) return;
+    
     const verifyPayment = async () => {
       if (!user || !session) {
         setStatus('error');
@@ -140,8 +144,10 @@ const PaymentSuccess = () => {
           setStatus('success');
           setMessage('Payment verified successfully! You are now enrolled.');
           setCourseId(data.courseId);
+          setHasVerified(true);
           // Clear session storage on success
           sessionStorage.removeItem('paymentMethod');
+          sessionStorage.removeItem('khaltiPidx');
         } else {
           console.error('Backend error:', data.error);
           throw new Error(data.error || 'Payment verification failed');
@@ -149,6 +155,7 @@ const PaymentSuccess = () => {
 
       } catch (error: any) {
         console.error('Payment verification error:', error);
+        setHasVerified(true);
         setStatus('error');
         setMessage(error.message || 'Payment verification failed. Please contact support.');
         
@@ -161,7 +168,7 @@ const PaymentSuccess = () => {
     };
 
     verifyPayment();
-  }, [user, session, searchParams, navigate]);
+  }, [user, session, searchParams, navigate, hasVerified]);
 
   return (
     <MainLayout>

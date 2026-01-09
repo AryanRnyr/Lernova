@@ -84,7 +84,9 @@ serve(async (req) => {
     const totalAmount = amount.toString();
     const signedFieldNames = "total_amount,transaction_uuid,product_code";
     const signatureMessage = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${ESEWA_PRODUCT_CODE}`;
-    const signature = generateSignature(signatureMessage, ESEWA_SECRET_KEY);
+    const signature = await generateSignature(signatureMessage, ESEWA_SECRET_KEY);
+
+    console.log('eSewa signature generated:', { signatureMessage, signature: signature.substring(0, 20) + '...' });
 
     // Return payment form data
     return new Response(JSON.stringify({
