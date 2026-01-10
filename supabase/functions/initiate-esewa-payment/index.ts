@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,51 +51,69 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { courseId, amount, successUrl, failureUrl } = await req.json();
+    const { courseId, amount, courses, totalAmount, successUrl, failureUrl } = await req.json();
 
-    if (!courseId || !amount) {
+    // Support both single course and multi-course payments
+    const coursesToProcess = courses || [{ id: courseId, price: amount }];
+    const paymentAmount = totalAmount || amount;
+
+    if (coursesToProcess.length === 0 || !paymentAmount) {
       throw new Error('Missing required fields');
     }
 
-    // Generate unique transaction UUID
+    // Generate unique transaction UUID for the entire batch
     const transactionUuid = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-    // Create order in database
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        user_id: user.id,
-        course_id: courseId,
-        amount: amount,
-        payment_method: 'esewa',
-        status: 'pending',
-        transaction_uuid: transactionUuid,
-      })
-      .select()
-      .single();
+    // Create orders for each course in the batch
+    const orderPromises = coursesToProcess.map((course: { id: string; price: number }) => 
+      supabase
+        .from('orders')
+        .insert({
+          user_id: user.id,
+          course_id: course.id,
+          amount: course.price,
+          payment_method: 'esewa',
+          status: 'pending',
+          transaction_uuid: transactionUuid,
+        })
+        .select()
+        .single()
+    );
 
-    if (orderError) {
-      console.error('Order creation error:', orderError);
-      throw new Error('Failed to create order');
+    const orderResults = await Promise.all(orderPromises);
+    
+    // Check for errors
+    for (const result of orderResults) {
+      if (result.error) {
+        console.error('Order creation error:', result.error);
+        throw new Error('Failed to create order');
+      }
     }
 
-    // Generate signature for eSewa
-    const totalAmount = amount.toString();
+    console.log('Created orders:', orderResults.map(r => r.data?.id));
+
+    // Generate signature for eSewa using total amount
+    const totalAmountStr = paymentAmount.toString();
     const signedFieldNames = "total_amount,transaction_uuid,product_code";
-    const signatureMessage = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${ESEWA_PRODUCT_CODE}`;
+    const signatureMessage = `total_amount=${totalAmountStr},transaction_uuid=${transactionUuid},product_code=${ESEWA_PRODUCT_CODE}`;
     const signature = await generateSignature(signatureMessage, ESEWA_SECRET_KEY);
 
-    console.log('eSewa signature generated:', { signatureMessage, signature: signature.substring(0, 20) + '...' });
+    console.log('eSewa payment initiated:', { 
+      transactionUuid, 
+      totalAmount: totalAmountStr, 
+      coursesCount: coursesToProcess.length,
+      signatureMessage
+    });
 
     // Return payment form data
     return new Response(JSON.stringify({
       success: true,
-      orderId: order.id,
+      orderIds: orderResults.map(r => r.data?.id),
       paymentUrl: ESEWA_PAYMENT_URL,
       formData: {
-        amount: totalAmount,
+        amount: totalAmountStr,
         tax_amount: "0",
-        total_amount: totalAmount,
+        total_amount: totalAmountStr,
         transaction_uuid: transactionUuid,
         product_code: ESEWA_PRODUCT_CODE,
         product_service_charge: "0",

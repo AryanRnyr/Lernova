@@ -38,9 +38,13 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { courseId, amount, courseName, successUrl, failureUrl } = await req.json();
+    const { courseId, amount, courseName, courses, totalAmount, successUrl, failureUrl } = await req.json();
 
-    if (!courseId || !amount) {
+    // Support both single course and multi-course payments
+    const coursesToProcess = courses || [{ id: courseId, title: courseName, price: amount }];
+    const paymentAmount = totalAmount || amount;
+
+    if (coursesToProcess.length === 0 || !paymentAmount) {
       throw new Error('Missing required fields');
     }
 
@@ -49,41 +53,51 @@ serve(async (req) => {
       throw new Error('Email is required for Khalti payment');
     }
 
-    console.log('User info for Khalti:', {
-      email: user.email,
-      phone: user.phone || user.user_metadata?.phone,
-      name: user.user_metadata?.full_name
-    });
+    // Generate unique batch ID for multi-course orders
+    const batchId = `batch-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 
-    // Generate unique transaction UUID
-    const transactionUuid = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    // Create orders for each course
+    const orderPromises = coursesToProcess.map((course: { id: string; price: number }) => 
+      supabase
+        .from('orders')
+        .insert({
+          user_id: user.id,
+          course_id: course.id,
+          amount: course.price,
+          payment_method: 'khalti',
+          status: 'pending',
+          transaction_uuid: batchId,
+        })
+        .select()
+        .single()
+    );
 
-    // Create order in database
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        user_id: user.id,
-        course_id: courseId,
-        amount: amount,
-        payment_method: 'khalti',
-        status: 'pending',
-        transaction_uuid: transactionUuid,
-      })
-      .select()
-      .single();
-
-    if (orderError) {
-      console.error('Order creation error:', orderError);
-      throw new Error('Failed to create order');
+    const orderResults = await Promise.all(orderPromises);
+    
+    // Check for errors
+    for (const result of orderResults) {
+      if (result.error) {
+        console.error('Order creation error:', result.error);
+        throw new Error('Failed to create order');
+      }
     }
 
+    const orderIds = orderResults.map(r => r.data!.id);
+    console.log('Created orders:', orderIds);
+
     // Convert amount to paisa (Khalti expects amount in paisa)
-    const amountInPaisa = Math.round(amount * 100);
+    const amountInPaisa = Math.round(paymentAmount * 100);
     const origin = req.headers.get('origin') || 'http://localhost:8080';
+
+    // Use the batch ID as purchase_order_id for tracking
+    const purchaseOrderName = coursesToProcess.length > 1 
+      ? `${coursesToProcess.length} Courses` 
+      : (coursesToProcess[0].title || 'Course Purchase');
 
     console.log('Initiating Khalti payment:', {
       amount: amountInPaisa,
-      orderId: order.id,
+      batchId,
+      orderIds,
       customerEmail: user.email
     });
 
@@ -95,11 +109,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        return_url: `http://localhost:8080/payment/success`,
-        website_url: 'http://localhost:8080',
+        return_url: successUrl || `${origin}/payment/success`,
+        website_url: origin,
         amount: amountInPaisa,
-        purchase_order_id: order.id,
-        purchase_order_name: courseName || 'Course Purchase',
+        purchase_order_id: batchId, // Use batch ID to link all orders
+        purchase_order_name: purchaseOrderName,
         customer_info: {
           name: user.user_metadata?.full_name || user.email.split('@')[0],
           email: user.email,
@@ -127,44 +141,21 @@ serve(async (req) => {
       throw new Error('Khalti did not return a payment ID (pidx)');
     }
 
-    console.log('About to update order with pidx:', { orderId: order.id, pidx: khaltiData.pidx });
+    // Update all orders with Khalti pidx
+    const updatePromises = orderIds.map(orderId => 
+      supabaseAdmin
+        .from('orders')
+        .update({ payment_reference: khaltiData.pidx })
+        .eq('id', orderId)
+    );
 
-    // Update order with Khalti pidx using admin client to bypass RLS
-    const { data: updatedOrder, error: updateError } = await supabaseAdmin
-      .from('orders')
-      .update({ payment_reference: khaltiData.pidx })
-      .eq('id', order.id)
-      .select()
-      .single();
-
-      
-    
-    if (updateError) {
-      console.error('Failed to update order with pidx:', updateError);
-      throw new Error('Failed to save payment reference');
-    }
-    
-    console.log('Order update result:', { 
-      success: !updateError, 
-      orderId: updatedOrder?.id,
-      payment_reference: updatedOrder?.payment_reference,
-      pidx: khaltiData.pidx
-    });
-
-    // Verify the update worked
-    if (!updatedOrder || updatedOrder.payment_reference !== khaltiData.pidx) {
-      console.error('Update verification failed:', {
-        expected: khaltiData.pidx,
-        actual: updatedOrder?.payment_reference
-      });
-      throw new Error('Payment reference was not saved correctly');
-    }
-    
-    console.log('✓ Order updated successfully with pidx:', khaltiData.pidx);
+    await Promise.all(updatePromises);
+    console.log('Updated all orders with pidx:', khaltiData.pidx);
 
     return new Response(JSON.stringify({
       success: true,
-      orderId: order.id,
+      orderIds,
+      batchId,
       paymentUrl: khaltiData.payment_url,
       pidx: khaltiData.pidx,
     }), {

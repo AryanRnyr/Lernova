@@ -51,59 +51,79 @@ const Checkout = () => {
     setProcessing(true);
 
     try {
-      // For single course checkout (we'll handle cart checkout later)
-      const firstItem = items[0];
-      const course = firstItem.course;
+      // Filter out items with valid courses
+      const validItems = items.filter(item => item.course);
       
-      if (!course) {
-        throw new Error('Course not found');
+      if (validItems.length === 0) {
+        throw new Error('No valid courses found in cart');
       }
 
-      // Handle free courses
-      if (course.is_free) {
-        // Directly enroll for free courses
+      // Handle free courses - enroll directly
+      const freeItems = validItems.filter(item => item.course?.is_free);
+      const paidItems = validItems.filter(item => !item.course?.is_free);
+
+      // Enroll in free courses directly
+      for (const item of freeItems) {
         const { error: enrollError } = await supabase
           .from('enrollments')
           .insert({
             user_id: user.id,
-            course_id: course.id,
+            course_id: item.course!.id,
           });
 
-        if (enrollError) throw enrollError;
+        if (enrollError && !enrollError.message.includes('duplicate')) {
+          console.error('Free enrollment error:', enrollError);
+        }
 
         // Remove from cart
         await supabase
           .from('cart_items')
           .delete()
           .eq('user_id', user.id)
-          .eq('course_id', course.id);
+          .eq('course_id', item.course!.id);
+      }
 
+      // If only free courses, redirect to dashboard
+      if (paidItems.length === 0) {
         toast({
           title: 'Enrolled successfully!',
-          description: `You are now enrolled in ${course.title}`,
+          description: `You are now enrolled in ${freeItems.length} course(s)`,
         });
-
         await refetch();
         navigate('/dashboard');
         return;
       }
 
-      // Paid course - initiate payment
+      // Calculate total for paid items
+      const totalAmount = paidItems.reduce((sum, item) => sum + (item.course?.price || 0), 0);
+      
+      // Prepare course data for multi-course payment
+      const courseData = paidItems.map(item => ({
+        id: item.course!.id,
+        title: item.course!.title,
+        price: item.course!.price,
+      }));
+
+      // Paid courses - initiate payment
       const functionName = paymentMethod === 'esewa' 
         ? 'initiate-esewa-payment' 
         : 'initiate-khalti-payment';
 
       const origin = window.location.origin;
-      // Use base URLs without query parameters - payment gateways will append their data
-      // We'll rely on sessionStorage to track the payment method
       const successUrl = `${origin}/payment/success`;
       const failureUrl = `${origin}/payment/failure`;
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: {
-          courseId: course.id,
-          amount: course.price,
-          courseName: course.title,
+          // For backwards compatibility, include single course fields
+          courseId: courseData[0].id,
+          amount: totalAmount,
+          courseName: courseData.length > 1 
+            ? `${courseData.length} Courses` 
+            : courseData[0].title,
+          // New multi-course fields
+          courses: courseData,
+          totalAmount,
           successUrl,
           failureUrl,
         },
@@ -115,8 +135,9 @@ const Checkout = () => {
         throw new Error(data.error || 'Payment initiation failed');
       }
 
-      // Store payment method for recovery if needed
+      // Store payment method and course info for recovery
       sessionStorage.setItem('paymentMethod', paymentMethod);
+      sessionStorage.setItem('pendingCourses', JSON.stringify(courseData.map(c => c.id)));
 
       if (paymentMethod === 'esewa') {
         // Create and submit eSewa form
@@ -263,6 +284,9 @@ const Checkout = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
+                <CardDescription>
+                  {items.length} {items.length === 1 ? 'course' : 'courses'} in your cart
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {items.map((item) => (
