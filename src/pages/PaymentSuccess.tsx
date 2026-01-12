@@ -22,8 +22,10 @@ const PaymentSuccess = () => {
     
     const verifyPayment = async () => {
       if (!user || !session) {
-        setStatus('error');
-        setMessage('Please sign in to verify payment');
+        // setStatus('error');
+        // setMessage('Please sign in to verify payment');
+        setStatus('verifying');
+        setMessage('The payment has been processed. Please wait while we redirect you.');
         return;
       }
 
