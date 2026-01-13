@@ -19,10 +19,10 @@ const AdminSettings = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (isAdmin() && !roleLoading) {
+    if (!roleLoading && isAdmin()) {
       fetchSettings();
     }
-  }, [isAdmin, roleLoading]);
+  }, [roleLoading]);
 
   const fetchSettings = async () => {
     const { data } = await supabase

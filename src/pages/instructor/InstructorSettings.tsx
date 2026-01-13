@@ -30,10 +30,10 @@ const InstructorSettings = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user && (isInstructor() || isAdmin())) {
+    if (user && !roleLoading && (isInstructor() || isAdmin())) {
       fetchSettings();
     }
-  }, [user, isInstructor, isAdmin]);
+  }, [user, roleLoading]);
 
   const fetchSettings = async () => {
     if (!user) return;
@@ -42,7 +42,7 @@ const InstructorSettings = () => {
       .from('instructor_applications')
       .select('payment_method, account_name, account_id')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
     if (data) {
       setPaymentMethod(data.payment_method || '');

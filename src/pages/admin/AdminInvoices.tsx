@@ -83,7 +83,7 @@ const AdminInvoices = () => {
     if (user && isAdmin()) {
       fetchOrders();
     }
-  }, [user, isAdmin]);
+  }, [user, roleLoading]);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -410,8 +410,9 @@ const AdminInvoices = () => {
           </Card>
         ) : (
           <Card>
-            <Table>
-              <TableHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                 <TableRow>
                   <TableHead>Invoice #</TableHead>
                   <TableHead>Date</TableHead>
@@ -464,6 +465,7 @@ const AdminInvoices = () => {
                 })}
               </TableBody>
             </Table>
+            </CardContent>
           </Card>
         )}
 

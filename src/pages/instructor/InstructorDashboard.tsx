@@ -92,7 +92,7 @@ const InstructorDashboard = () => {
         });
       }
 
-      // Fetch commission percentage
+      // Fetch commission percentage (current rate for display)
       const { data: settingsData } = await supabase
         .from('platform_settings')
         .select('setting_value')
@@ -101,26 +101,34 @@ const InstructorDashboard = () => {
 
       const commissionPercentage = settingsData ? parseFloat(settingsData.setting_value) : 20;
 
-      // Fetch completed orders for this instructor's courses
+      // Fetch completed orders for this instructor's courses (including commission at time of order)
       const { data: ordersData } = await supabase
         .from('orders')
-        .select('amount, course_id, courses!inner(instructor_id)')
+        .select('amount, commission_percentage, courses!inner(instructor_id)')
         .eq('status', 'completed')
         .eq('courses.instructor_id', user.id);
 
-      // Calculate earnings
-      const totalRevenue = ordersData?.reduce((acc, order) => acc + (order.amount || 0), 0) || 0;
-      const commissionPaid = totalRevenue * (commissionPercentage / 100);
+      // Calculate earnings using the commission at time of each order
+      let totalRevenue = 0;
+      let commissionPaid = 0;
+
+      ordersData?.forEach((order: any) => {
+        const orderCommission = order.commission_percentage || commissionPercentage;
+        totalRevenue += order.amount || 0;
+        commissionPaid += (order.amount || 0) * (orderCommission / 100);
+      });
+
       const totalEarnings = totalRevenue - commissionPaid;
 
-      // Fetch already paid out amounts
+      // Fetch already paid out amounts from instructor_payouts table
       const { data: payoutsData } = await supabase
-        .from('payout_requests')
-        .select('amount')
-        .eq('instructor_id', user.id)
-        .eq('status', 'completed');
+        .from('instructor_payouts')
+        .select('amount, status')
+        .eq('instructor_id', user.id);
 
-      const paidOut = payoutsData?.reduce((acc, p) => acc + (p.amount || 0), 0) || 0;
+      const paidOut = payoutsData
+        ?.filter((p: any) => p.status === 'completed')
+        .reduce((acc: number, p: any) => acc + (p.amount || 0), 0) || 0;
       const pendingPayout = totalEarnings - paidOut;
 
       setEarnings({

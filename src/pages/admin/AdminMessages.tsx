@@ -95,7 +95,7 @@ const AdminMessages = () => {
     if (user && isAdmin()) {
       fetchMessages();
     }
-  }, [user, isAdmin]);
+  }, [user, roleLoading]);
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -327,8 +327,9 @@ const AdminMessages = () => {
           </Card>
         ) : (
           <Card>
-            <Table>
-              <TableHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                 <TableRow>
                   <TableHead>Status</TableHead>
                   <TableHead>Name</TableHead>
@@ -372,8 +373,9 @@ const AdminMessages = () => {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         )}
 

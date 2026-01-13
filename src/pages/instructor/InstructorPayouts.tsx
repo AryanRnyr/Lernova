@@ -72,10 +72,10 @@ const InstructorPayouts = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (user && (isInstructor() || isAdmin())) {
+    if (user && !roleLoading && (isInstructor() || isAdmin())) {
       fetchData();
     }
-  }, [user, isInstructor, isAdmin, dateFrom, dateTo]);
+  }, [user, roleLoading, dateFrom, dateTo]);
 
   const fetchData = async () => {
     if (!user) return;

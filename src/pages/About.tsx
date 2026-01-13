@@ -1,6 +1,8 @@
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent } from '@/components/ui/card';
-import { Target, Users, Award, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Target, Users, Award, BookOpen, Globe, Github, Linkedin, Code, GraduationCap } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const About = () => {
   const stats = [
@@ -36,6 +38,82 @@ const About = () => {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Developer Section */}
+      <section className="py-12 md:py-16 bg-muted/30">
+        <div className="container">
+          <h2 className="text-3xl font-bold text-center mb-12">Meet the Developer</h2>
+          <div className="max-w-4xl mx-auto">
+            <Card className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="grid md:grid-cols-5 gap-0">
+                  {/* Image */}
+                  <div className="md:col-span-2 bg-gradient-to-br from-primary/20 to-primary/5">
+                    <img 
+                      src="/AR.png" 
+                      alt="Aryan Rauniyar" 
+                      className="w-full h-full object-cover min-h-[300px]"
+                    />
+                  </div>
+                  {/* Content */}
+                  <div className="md:col-span-3 p-8">
+                    <div className="flex items-center gap-2 text-primary text-sm font-medium mb-2">
+                      <Code className="h-4 w-4" />
+                      Full Stack Developer
+                    </div>
+                    <h3 className="text-2xl font-bold mb-2">Aryan Rauniyar</h3>
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm mb-4">
+                      <GraduationCap className="h-4 w-4" />
+                      BCA Student
+                    </div>
+                    <p className="text-muted-foreground mb-4">
+                      Hi, I'm Aryan Rauniyar, a passionate full-stack developer and currently pursuing 
+                      my Bachelor's in Computer Applications (BCA). I built Lernova with the vision of 
+                      making quality education accessible to everyone in Nepal.
+                    </p>
+                    <p className="text-muted-foreground mb-6">
+                      With a keen interest in web development and modern technologies, I enjoy building 
+                      applications that solve real-world problems. Lernova is my initiative to contribute 
+                      to the education sector by connecting learners with expert instructors through a 
+                      seamless digital platform.
+                    </p>
+                    {/* Social Links */}
+                    <div className="flex gap-3">
+                      <a 
+                        href="https://aryanrauniyar.com.np" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors text-sm font-medium"
+                      >
+                        <Globe className="h-4 w-4" />
+                        Portfolio
+                      </a>
+                      <a 
+                        href="https://github.com/AryanRnyr" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors text-sm font-medium"
+                      >
+                        <Github className="h-4 w-4" />
+                        GitHub
+                      </a>
+                      <a 
+                        href="https://www.linkedin.com/in/aryanrauniyar/" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors text-sm font-medium"
+                      >
+                        <Linkedin className="h-4 w-4" />
+                        LinkedIn
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -97,6 +175,19 @@ const About = () => {
               </ul>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-16 md:py-20 bg-primary text-primary-foreground">
+        <div className="container text-center">
+          <h2 className="text-3xl font-bold mb-4">Ready to Start Your Learning Journey?</h2>
+          <p className="text-lg opacity-90 max-w-2xl mx-auto mb-8">
+            Join thousands of learners and start exploring our courses today.
+          </p>
+          <Button size="lg" variant="secondary" asChild>
+            <Link to="/catalog">Browse Courses</Link>
+          </Button>
         </div>
       </section>
     </MainLayout>

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { GraduationCap, Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
+import { GraduationCap, Globe, Github, Linkedin, Facebook } from "lucide-react";
 
 export const Footer = () => {
   return (
@@ -16,16 +16,13 @@ export const Footer = () => {
               Empowering learners with quality education. Start your learning journey today with Lernova.
             </p>
             <div className="flex gap-4">
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Facebook className="h-5 w-5" />
+              <a href="https://aryanrauniyar.com.np" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Globe className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Twitter className="h-5 w-5" />
+              <a href="https://github.com/AryanRnyr" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Github className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                <Instagram className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">
+              <a href="https://www.linkedin.com/in/aryanrauniyar/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
                 <Linkedin className="h-5 w-5" />
               </a>
             </div>
