@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/select';
 import { CloudinaryUpload } from '@/components/ui/cloudinary-upload';
 import { Loader2 } from 'lucide-react';
+import { DifficultyPredictor } from './DifficultyPredictor';
+import { DynamicPricingForm } from './DynamicPricingForm';
 
 interface Category {
   id: string;
@@ -29,6 +31,12 @@ interface CourseFormProps {
     price: number;
     is_free: boolean;
     thumbnail_url: string;
+    difficulty_level?: string;
+    base_price?: number;
+    min_price?: number;
+    max_price?: number;
+    enrollment_target?: number;
+    dynamic_pricing_enabled?: boolean;
   };
   onSubmit: (data: {
     title: string;
@@ -37,11 +45,19 @@ interface CourseFormProps {
     price: number;
     is_free: boolean;
     thumbnail_url: string;
+    difficulty_level: string;
+    base_price: number;
+    min_price: number;
+    max_price: number;
+    enrollment_target: number;
+    dynamic_pricing_enabled: boolean;
+    current_price: number;
   }) => Promise<void>;
   loading: boolean;
+  currentEnrollments?: number;
 }
 
-export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) => {
+export const CourseForm = ({ initialData, onSubmit, loading, currentEnrollments = 0 }: CourseFormProps) => {
   const [title, setTitle] = useState(initialData?.title || '');
   const [description, setDescription] = useState(initialData?.description || '');
   const [categoryId, setCategoryId] = useState<string | null>(initialData?.category_id || null);
@@ -49,6 +65,14 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
   const [isFree, setIsFree] = useState(initialData?.is_free ?? true);
   const [thumbnailUrl, setThumbnailUrl] = useState(initialData?.thumbnail_url || '');
   const [categories, setCategories] = useState<Category[]>([]);
+  const [difficultyLevel, setDifficultyLevel] = useState(initialData?.difficulty_level || 'beginner');
+  
+  // Dynamic pricing state
+  const [basePrice, setBasePrice] = useState(initialData?.base_price || initialData?.price || 0);
+  const [minPrice, setMinPrice] = useState(initialData?.min_price || (initialData?.price ? initialData.price * 0.5 : 0));
+  const [maxPrice, setMaxPrice] = useState(initialData?.max_price || (initialData?.price ? initialData.price * 1.5 : 0));
+  const [enrollmentTarget, setEnrollmentTarget] = useState(initialData?.enrollment_target || 100);
+  const [dynamicPricingEnabled, setDynamicPricingEnabled] = useState(initialData?.dynamic_pricing_enabled ?? true);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -65,20 +89,53 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
     fetchCategories();
   }, []);
 
+  // Update price ranges when base price changes (for new courses)
+  useEffect(() => {
+    if (!initialData && !isFree) {
+      const parsedPrice = parseFloat(price) || 0;
+      if (parsedPrice > 0) {
+        setBasePrice(parsedPrice);
+        setMinPrice(Math.round(parsedPrice * 0.5));
+        setMaxPrice(Math.round(parsedPrice * 1.5));
+      }
+    }
+  }, [price, isFree, initialData]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const priceValue = isFree ? 0 : parseFloat(price) || 0;
+    const finalBasePrice = isFree ? 0 : basePrice;
+    const finalMinPrice = isFree ? 0 : minPrice;
+    const finalMaxPrice = isFree ? 0 : maxPrice;
+    
+    // Calculate current price based on formula
+    let currentPrice = priceValue;
+    if (dynamicPricingEnabled && !isFree && enrollmentTarget > 0) {
+      const ratio = Math.min(1, currentEnrollments / enrollmentTarget);
+      currentPrice = finalMinPrice + (ratio * (finalMaxPrice - finalMinPrice));
+      currentPrice = Math.round(currentPrice / 50) * 50;
+    }
+    
     await onSubmit({
       title,
       description,
       category_id: categoryId,
-      price: isFree ? 0 : parseFloat(price) || 0,
+      price: priceValue,
       is_free: isFree,
       thumbnail_url: thumbnailUrl,
+      difficulty_level: difficultyLevel,
+      base_price: finalBasePrice,
+      min_price: finalMinPrice,
+      max_price: finalMaxPrice,
+      enrollment_target: enrollmentTarget,
+      dynamic_pricing_enabled: isFree ? false : dynamicPricingEnabled,
+      current_price: currentPrice,
     });
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Course Details</CardTitle>
@@ -125,6 +182,30 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
             </Select>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="difficulty">Difficulty Level</Label>
+            <Select
+              value={difficultyLevel}
+              onValueChange={setDifficultyLevel}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select difficulty" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="beginner">Beginner</SelectItem>
+                <SelectItem value="intermediate">Intermediate</SelectItem>
+                <SelectItem value="advanced">Advanced</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <DifficultyPredictor
+              title={title}
+              description={description}
+              currentDifficulty={difficultyLevel}
+              onDifficultyChange={setDifficultyLevel}
+            />
+          </div>
+
           <CloudinaryUpload
             type="image"
             value={thumbnailUrl}
@@ -148,7 +229,7 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
 
           {!isFree && (
             <div className="space-y-2">
-              <Label htmlFor="price">Price (NPR) *</Label>
+              <Label htmlFor="price">Base Price (NPR) *</Label>
               <Input
                 id="price"
                 type="number"
@@ -161,13 +242,29 @@ export const CourseForm = ({ initialData, onSubmit, loading }: CourseFormProps) 
               />
             </div>
           )}
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {initialData ? 'Update Course' : 'Create Course'}
-          </Button>
         </CardContent>
       </Card>
+
+      {!isFree && (
+        <DynamicPricingForm
+          basePrice={basePrice}
+          minPrice={minPrice}
+          maxPrice={maxPrice}
+          enrollmentTarget={enrollmentTarget}
+          dynamicPricingEnabled={dynamicPricingEnabled}
+          currentEnrollments={currentEnrollments}
+          onBasePriceChange={setBasePrice}
+          onMinPriceChange={setMinPrice}
+          onMaxPriceChange={setMaxPrice}
+          onEnrollmentTargetChange={setEnrollmentTarget}
+          onDynamicPricingChange={setDynamicPricingEnabled}
+        />
+      )}
+
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {initialData ? 'Update Course' : 'Create Course'}
+      </Button>
     </form>
   );
 };

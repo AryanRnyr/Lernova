@@ -18,6 +18,7 @@ interface Course {
   description: string | null;
   thumbnail_url: string | null;
   price: number;
+  current_price: number;
   is_free: boolean;
   total_duration: number | null;
   instructor_id: string;
@@ -104,9 +105,9 @@ const Catalog = () => {
       const { data, error } = await supabase.rpc('search_courses', {
         search_term: debouncedSearch || null,
         category_filter: selectedCategory,
-        min_price: priceType === 'paid' ? priceRange[0] : null,
-        max_price: priceType === 'paid' ? priceRange[1] : null,
-        min_rating: minRating > 0 ? minRating : null,
+        p_min_price: priceType === 'paid' ? priceRange[0] : null,
+        p_max_price: priceType === 'paid' ? priceRange[1] : null,
+        p_min_rating: minRating > 0 ? minRating : null,
         difficulty_filter: difficulty,
         price_type: priceType === 'all' ? null : priceType,
       });
@@ -326,7 +327,7 @@ const Catalog = () => {
                         <Badge className="bg-green-500 hover:bg-green-600">Free</Badge>
                       ) : (
                         <span className="font-bold text-primary">
-                          {formatPrice(course.price)}
+                          {formatPrice(course.current_price || course.price)}
                         </span>
                       )}
                     </CardFooter>

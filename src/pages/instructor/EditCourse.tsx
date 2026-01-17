@@ -28,6 +28,13 @@ interface Course {
   instructor_id: string;
   last_edited_by: string | null;
   last_edited_at: string | null;
+  difficulty_level?: string;
+  base_price?: number;
+  min_price?: number;
+  max_price?: number;
+  enrollment_target?: number;
+  dynamic_pricing_enabled?: boolean;
+  current_price?: number;
 }
 
 interface AdminEditInfo {
@@ -94,6 +101,13 @@ const EditCourse = () => {
     price: number;
     is_free: boolean;
     thumbnail_url: string;
+    difficulty_level: string;
+    base_price: number;
+    min_price: number;
+    max_price: number;
+    enrollment_target: number;
+    dynamic_pricing_enabled: boolean;
+    current_price: number;
   }) => {
     if (!id || !course) return;
 
@@ -291,6 +305,12 @@ const EditCourse = () => {
                 price: course.price,
                 is_free: course.is_free,
                 thumbnail_url: course.thumbnail_url || '',
+                difficulty_level: course.difficulty_level || 'beginner',
+                base_price: course.base_price || course.price,
+                min_price: course.min_price || course.price * 0.5,
+                max_price: course.max_price || course.price * 1.5,
+                enrollment_target: course.enrollment_target || 100,
+                dynamic_pricing_enabled: course.dynamic_pricing_enabled ?? true,
               }}
               onSubmit={handleUpdateDetails}
               loading={saving}

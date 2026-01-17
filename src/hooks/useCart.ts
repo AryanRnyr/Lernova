@@ -12,6 +12,7 @@ interface CartItem {
     title: string;
     slug: string;
     price: number;
+    current_price: number | null;
     is_free: boolean;
     thumbnail_url: string | null;
     instructor_id: string;
@@ -46,6 +47,7 @@ export function useCart() {
             title,
             slug,
             price,
+            current_price,
             is_free,
             thumbnail_url,
             instructor_id
@@ -67,6 +69,7 @@ export function useCart() {
               ...item,
               course: {
                 ...item.course,
+                current_price: item.course?.current_price ?? item.course?.price ?? 0,
                 instructor_name: instructor?.full_name || null,
               },
             };
@@ -75,6 +78,7 @@ export function useCart() {
             ...item,
             course: {
               ...item.course,
+              current_price: item.course?.current_price ?? item.course?.price ?? 0,
               instructor_name: null,
             },
           };
@@ -213,7 +217,8 @@ export function useCart() {
   const getTotal = () => {
     return items.reduce((total, item) => {
       if (item.course?.is_free) return total;
-      return total + (item.course?.price || 0);
+      const price = item.course?.current_price ?? item.course?.price ?? 0;
+      return total + price;
     }, 0);
   };
 

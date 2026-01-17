@@ -42,9 +42,12 @@ import {
   Search,
   DollarSign,
   TrendingUp,
-  Users
+  Users,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import jsPDF from 'jspdf';
+import { useToast } from '@/hooks/use-toast';
 
 interface Order {
   id: string;
@@ -67,6 +70,7 @@ interface Order {
 const AdminInvoices = () => {
   const { user } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -78,6 +82,12 @@ const AdminInvoices = () => {
     return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   });
   const [dateTo, setDateTo] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  
+  // State for marking order as completed
+  const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
+  const [orderToComplete, setOrderToComplete] = useState<Order | null>(null);
+  const [paymentReference, setPaymentReference] = useState('');
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (user && isAdmin()) {
@@ -172,6 +182,75 @@ const AdminInvoices = () => {
   const openDetails = (order: Order) => {
     setSelectedOrder(order);
     setDetailsOpen(true);
+  };
+
+  const openCompleteDialog = (order: Order) => {
+    setOrderToComplete(order);
+    setPaymentReference('');
+    setCompleteDialogOpen(true);
+  };
+
+  const handleMarkAsCompleted = async () => {
+    if (!orderToComplete || !paymentReference.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Please enter a payment reference',
+      });
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // Update order status to completed
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({
+          status: 'completed',
+          payment_reference: paymentReference.trim(),
+        })
+        .eq('id', orderToComplete.id);
+
+      if (orderError) throw orderError;
+
+      // Create enrollment for the user
+      const { error: enrollError } = await supabase
+        .from('enrollments')
+        .insert({
+          user_id: orderToComplete.user_id,
+          course_id: orderToComplete.course.id,
+        });
+
+      if (enrollError && !enrollError.message.includes('duplicate')) {
+        console.error('Enrollment error:', enrollError);
+      }
+
+      // Remove from cart if exists
+      await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', orderToComplete.user_id)
+        .eq('course_id', orderToComplete.course.id);
+
+      toast({
+        title: 'Order Completed',
+        description: 'Order marked as completed and user enrolled in course',
+      });
+
+      setCompleteDialogOpen(false);
+      setOrderToComplete(null);
+      setPaymentReference('');
+      fetchOrders();
+    } catch (error: any) {
+      console.error('Error completing order:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to complete order',
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const downloadInvoice = (order: Order) => {
@@ -449,16 +528,32 @@ const AdminInvoices = () => {
                       </TableCell>
                       <TableCell>{getStatusBadge(order.status)}</TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            downloadInvoice(order);
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          {order.status === 'pending' && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openCompleteDialog(order);
+                              }}
+                              title="Mark as Completed"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadInvoice(order);
+                            }}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -568,6 +663,84 @@ const AdminInvoices = () => {
                   <Download className="h-4 w-4 mr-2" />
                   Download Invoice (PDF)
                 </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Mark as Completed Dialog */}
+        <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                Mark Order as Completed
+              </DialogTitle>
+              <DialogDescription>
+                This will mark the order as completed and enroll the user in the course.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {orderToComplete && (
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Order ID:</span>
+                    <span className="font-mono">#{orderToComplete.id.slice(0, 8).toUpperCase()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Course:</span>
+                    <span className="font-medium">{orderToComplete.course.title}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Amount:</span>
+                    <span className="font-medium">{formatPrice(orderToComplete.amount)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Customer:</span>
+                    <span>{orderToComplete.user_email}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Payment Reference *</label>
+                  <Input
+                    placeholder="Enter transaction ID or reference number"
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    This will be stored as the transaction reference for this order.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setCompleteDialogOpen(false)}
+                    disabled={processing}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={handleMarkAsCompleted}
+                    disabled={processing || !paymentReference.trim()}
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Mark as Completed
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>

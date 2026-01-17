@@ -124,7 +124,7 @@ const Cart = () => {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <span className="font-bold text-lg">
-                          {item.course?.is_free ? 'Free' : formatPrice(item.course?.price || 0)}
+                          {item.course?.is_free ? 'Free' : formatPrice(item.course?.current_price ?? item.course?.price ?? 0)}
                         </span>
                         <Button
                           variant="ghost"

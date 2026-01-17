@@ -14,6 +14,7 @@ interface RecommendedCourse {
   description: string | null;
   thumbnail_url: string | null;
   price: number;
+  current_price: number | null;
   is_free: boolean;
   total_duration: number;
   average_rating: number;
@@ -48,6 +49,7 @@ export function CourseRecommendations({
             description,
             thumbnail_url,
             price,
+            current_price,
             is_free,
             total_duration,
             average_rating,
@@ -74,8 +76,25 @@ export function CourseRecommendations({
           p_limit: limit,
         });
 
-        if (data) {
-          setCourses(data as RecommendedCourse[]);
+        if (data && Array.isArray(data) && data.length > 0) {
+          // RPC returns `price` (base price). We need to prefer `current_price` (dynamic price)
+          const ids = data.map((c: any) => c.id);
+
+          const { data: priceRows } = await supabase
+            .from('courses')
+            .select('id, price, current_price')
+            .in('id', ids as any[]);
+
+          const priceMap: Record<string, { current_price: number | null; price: number }> = {};
+          (priceRows || []).forEach((r: any) => {
+            priceMap[r.id] = { current_price: r.current_price, price: r.price };
+          });
+
+          setCourses(data.map((c: any) => ({
+            ...c,
+            // prefer current_price from DB if available, otherwise fall back to RPC price
+            current_price: (priceMap[c.id]?.current_price ?? priceMap[c.id]?.price ?? c.price) as number,
+          })) as RecommendedCourse[]);
         }
       }
       setLoading(false);
@@ -185,7 +204,7 @@ export function CourseRecommendations({
                     </div>
                   </div>
                   <span className="font-semibold text-primary">
-                    {course.is_free ? 'Free' : formatPrice(course.price)}
+                    {course.is_free ? 'Free' : formatPrice(course.current_price || course.price)}
                   </span>
                 </div>
               </CardContent>

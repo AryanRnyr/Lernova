@@ -11,7 +11,7 @@ const corsHeaders = {
 const ESEWA_SECRET_KEY = "8gBm/:&EnhH.1/q";
 
 // Khalti Configuration
-const KHALTI_SECRET_KEY = Deno.env.get('KHALTI_SECRET_KEY') || "58cdd238e8394b71ae1e51aa1505c09d";
+const KHALTI_SECRET_KEY = "live_secret_key_68791341fdd94846a146f0457ff7b455";
 const KHALTI_LOOKUP_URL = "https://a.khalti.com/api/v2/epayment/lookup/";
 
 async function verifyEsewaSignature(message: string, signature: string, secretKey: string): Promise<boolean> {
@@ -63,6 +63,7 @@ serve(async (req) => {
 
     if (method === 'esewa') {
       // Verify eSewa payment
+      // Decode the base64 data from eSewa
       const decodedData = JSON.parse(new TextDecoder().decode(base64Decode(paymentData)));
       
       const { transaction_uuid, status, total_amount, transaction_code, signature } = decodedData;
@@ -86,109 +87,95 @@ serve(async (req) => {
         }
       }
 
-      // Find ALL orders by transaction_uuid (batch payment)
-      let orders: any[] = [];
-      
-      const { data: ordersByTxn, error: ordersError } = await supabaseAdmin
+      // Find order by transaction_uuid
+      let order;
+      const { data: orderByUuid, error: orderError1 } = await supabaseAdmin
         .from('orders')
         .select('*')
         .eq('transaction_uuid', transaction_uuid)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .single();
 
-      if (ordersByTxn && ordersByTxn.length > 0) {
-        orders = ordersByTxn;
+      if (orderByUuid) {
+        order = orderByUuid;
       } else {
-        console.error('Orders not found by transaction_uuid:', { transaction_uuid, error: ordersError });
-        
-        // Fallback: find pending orders for this user
-        const { data: pendingOrders, error: pendingError } = await supabaseAdmin
+        console.warn('Order not found by transaction_uuid, trying by user_id and pending status');
+        // Fallback: find the most recent pending order for this user
+        const { data: orderByUser, error: orderError2 } = await supabaseAdmin
           .from('orders')
           .select('*')
           .eq('user_id', user.id)
           .eq('status', 'pending')
-          .eq('payment_method', 'esewa')
-          .order('created_at', { ascending: false });
-
-        if (pendingError || !pendingOrders || pendingOrders.length === 0) {
-          throw new Error('No pending orders found');
-        }
-
-        orders = pendingOrders;
-      }
-
-      console.log(`Found ${orders.length} orders to process`);
-
-      // Calculate expected total
-      const orderTotal = orders.reduce((sum, order) => sum + order.amount, 0);
-      const receivedAmount = parseInt(total_amount);
-      
-      // Allow some tolerance for rounding
-      if (Math.abs(receivedAmount - orderTotal) > 1) {
-        console.warn(`Amount mismatch: expected ${orderTotal}, got ${receivedAmount}`);
-      }
-
-      // Process all orders
-      const courseIds: string[] = [];
-      
-      for (const order of orders) {
-        // Skip already completed orders
-        if (order.status === 'completed') {
-          console.log('Order already completed:', order.id);
-          courseIds.push(order.course_id);
-          continue;
-        }
-
-        // Update order status
-        const { error: updateError } = await supabaseAdmin
-          .from('orders')
-          .update({ 
-            status: 'completed',
-            payment_reference: transaction_code,
-          })
-          .eq('id', order.id);
-
-        if (updateError) {
-          console.error('Order update error:', updateError);
-          continue;
-        }
-
-        // Check if enrollment already exists
-        const { data: existingEnrollment } = await supabaseAdmin
-          .from('enrollments')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('course_id', order.course_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
           .single();
 
-        // Create enrollment only if it doesn't exist
-        if (!existingEnrollment) {
-          const { error: enrollError } = await supabaseAdmin
-            .from('enrollments')
-            .insert({
-              user_id: user.id,
-              course_id: order.course_id,
-            });
-
-          if (enrollError && !enrollError.message.includes('duplicate')) {
-            console.error('Enrollment creation error:', enrollError);
-          }
+        if (orderByUser) {
+          order = orderByUser;
+        } else {
+          console.error('Order lookup errors:', { orderError1, orderError2 });
+          throw new Error('Order not found');
         }
-
-        // Remove from cart
-        await supabaseAdmin
-          .from('cart_items')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('course_id', order.course_id);
-
-        courseIds.push(order.course_id);
       }
+
+      // Verify amount matches
+      if (parseInt(total_amount) !== Math.round(order.amount)) {
+        throw new Error(`Amount mismatch: expected ${order.amount}, got ${total_amount}`);
+      }
+
+      // Update order status
+      const { error: updateError } = await supabaseAdmin
+        .from('orders')
+        .update({ 
+          status: 'completed',
+          payment_reference: transaction_code,
+        })
+        .eq('id', order.id);
+
+      if (updateError) {
+        console.error('Order update error:', updateError);
+        throw new Error('Failed to update order');
+      }
+
+      // Check if enrollment already exists
+      const { data: existingEnrollment, error: checkError } = await supabaseAdmin
+        .from('enrollments')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('course_id', order.course_id)
+        .single();
+
+      // Create enrollment only if it doesn't exist
+      if (!existingEnrollment && checkError?.code === 'PGRST116') {
+        const { error: enrollError } = await supabaseAdmin
+          .from('enrollments')
+          .insert({
+            user_id: user.id,
+            course_id: order.course_id,
+          });
+
+        if (enrollError) {
+          console.error('Enrollment creation error:', enrollError);
+          throw new Error('Failed to create enrollment');
+        }
+      } else if (existingEnrollment) {
+        console.log('Enrollment already exists for user:', user.id, 'course:', order.course_id);
+      } else if (checkError) {
+        console.error('Enrollment check error:', checkError);
+        throw new Error('Failed to check enrollment');
+      }
+
+      // Remove from cart if exists
+      await supabaseAdmin
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('course_id', order.course_id);
 
       return new Response(JSON.stringify({
         success: true,
-        message: `Payment verified and enrolled in ${courseIds.length} course(s)`,
-        courseIds,
-        courseId: courseIds[0], // For backwards compatibility
+        message: 'Payment verified and enrollment created',
+        courseId: order.course_id,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -198,6 +185,8 @@ serve(async (req) => {
       console.log('Khalti payment data received:', paymentData);
       
       const { pidx, purchaseOrderId } = paymentData;
+
+      console.log('Khalti pidx and purchaseOrderId:', { pidx, purchaseOrderId });
 
       // If pidx is provided, verify with Khalti API
       let khaltiVerified = false;
@@ -228,122 +217,162 @@ serve(async (req) => {
         }
         
         khaltiVerified = true;
+      } else {
+        console.warn('No pidx provided - will rely on order status check');
       }
 
-      // Find ALL orders with this pidx (batch payment)
-      let orders = [];
+      console.log('Khalti payment verified, looking up order');
+
+      // Find order by payment_reference (pidx) if available, or by recent pending order
+      let order;
       
-      // First try to find by payment_reference (pidx)
-      if (pidx) {
-        const { data: ordersByPidx, error: pidxError } = await supabaseAdmin
+      // First priority: Use purchase_order_id if provided (most reliable)
+      if (purchaseOrderId) {
+        console.log('Trying to find order by purchase_order_id:', purchaseOrderId);
+        const { data: orderById, error: orderErrorById } = await supabaseAdmin
+          .from('orders')
+          .select('*')
+          .eq('id', purchaseOrderId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (orderById) {
+          order = orderById;
+          console.log('Order found by purchase_order_id:', order.id);
+        } else {
+          console.warn('Order not found by purchase_order_id:', { purchaseOrderId, error: orderErrorById?.message });
+        }
+      }
+      
+      // Second priority: Try pidx if order not found yet
+      if (!order && pidx) {
+        // Try to find by payment_reference first
+        const { data: orderByRef, error: orderError1 } = await supabaseAdmin
           .from('orders')
           .select('*')
           .eq('payment_reference', pidx)
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .single();
 
-        if (ordersByPidx && ordersByPidx.length > 0) {
-          orders = ordersByPidx;
-          console.log(`Found ${orders.length} orders by pidx`);
+        console.log('Order lookup by pidx:', { found: !!orderByRef, error: orderError1?.message, pidx, userId: user.id });
+
+        if (orderByRef) {
+          order = orderByRef;
+          console.log('Order found by pidx:', order.id);
+        } else {
+          console.warn('Order not found by pidx, trying by user_id and pending status');
+          
+          // DEBUG: Check all pending orders for this user
+          const { data: allPending, error: allPendingError } = await supabaseAdmin
+            .from('orders')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending');
+          
+          console.log('DEBUG - All pending orders for user:', { 
+            userId: user.id, 
+            count: allPending?.length || 0,
+            orders: allPending?.map(o => ({ id: o.id, payment_reference: o.payment_reference, created_at: o.created_at })) || [],
+            error: allPendingError?.message
+          });
+          
+          // Fallback: find the most recent pending order for this user
+          const { data: orderByUser, error: orderError2 } = await supabaseAdmin
+            .from('orders')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          console.log('Order lookup by user+status:', { found: !!orderByUser, error: orderError2?.message });
+
+          if (orderByUser) {
+            order = orderByUser;
+            console.log('Order found by user and status:', order.id);
+          } else {
+            console.error('Order lookup errors:', { orderError1: orderError1?.message, orderError2: orderError2?.message });
+            throw new Error(`Order not found for user ${user.id}. Errors: ${orderError1?.message}, ${orderError2?.message}`);
+          }
         }
-      }
-
-      // If no orders found by pidx, try transaction_uuid (batch ID)
-      if (orders.length === 0 && purchaseOrderId) {
-        const { data: ordersByBatch, error: batchError } = await supabaseAdmin
-          .from('orders')
-          .select('*')
-          .eq('transaction_uuid', purchaseOrderId)
-          .eq('user_id', user.id);
-
-        if (ordersByBatch && ordersByBatch.length > 0) {
-          orders = ordersByBatch;
-          console.log(`Found ${orders.length} orders by batch ID`);
-        }
-      }
-
-      // Fallback: find pending khalti orders for this user
-      if (orders.length === 0) {
-        const { data: pendingOrders, error: pendingError } = await supabaseAdmin
+      } else {
+        // No pidx provided - find the most recent pending order
+        console.log('Finding most recent pending order for user:', user.id);
+        const { data: orderByUser, error: orderError } = await supabaseAdmin
           .from('orders')
           .select('*')
           .eq('user_id', user.id)
           .eq('status', 'pending')
-          .eq('payment_method', 'khalti')
-          .order('created_at', { ascending: false });
-
-        if (pendingOrders && pendingOrders.length > 0) {
-          orders = pendingOrders;
-          console.log(`Found ${orders.length} pending khalti orders`);
-        }
-      }
-
-      if (orders.length === 0) {
-        throw new Error('No orders found for this payment');
-      }
-
-      // Process all orders
-      const courseIds: string[] = [];
-      const paymentRef = lookupData?.transaction_id || pidx || 'khalti-payment';
-      
-      for (const order of orders) {
-        // Skip already completed orders
-        if (order.status === 'completed') {
-          console.log('Order already completed:', order.id);
-          courseIds.push(order.course_id);
-          continue;
-        }
-
-        // Update order status
-        const { error: updateError } = await supabaseAdmin
-          .from('orders')
-          .update({ 
-            status: 'completed',
-            payment_reference: paymentRef,
-          })
-          .eq('id', order.id);
-
-        if (updateError) {
-          console.error('Order update error:', updateError);
-          continue;
-        }
-
-        // Check if enrollment already exists
-        const { data: existingEnrollment } = await supabaseAdmin
-          .from('enrollments')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('course_id', order.course_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
           .single();
 
-        // Create enrollment only if it doesn't exist
-        if (!existingEnrollment) {
-          const { error: enrollError } = await supabaseAdmin
-            .from('enrollments')
-            .insert({
-              user_id: user.id,
-              course_id: order.course_id,
-            });
+        console.log('Order lookup result:', { found: !!orderByUser, error: orderError?.message });
 
-          if (enrollError && !enrollError.message.includes('duplicate')) {
-            console.error('Enrollment creation error:', enrollError);
-          }
+        if (orderByUser) {
+          order = orderByUser;
+          console.log('Order found by user and status:', order.id);
+          pidx = orderByUser.payment_reference; // Get the pidx from the order if available
+        } else {
+          console.error('Order not found:', orderError);
+          throw new Error(`No pending order found for user ${user.id}. Error: ${orderError?.message}`);
         }
-
-        // Remove from cart
-        await supabaseAdmin
-          .from('cart_items')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('course_id', order.course_id);
-
-        courseIds.push(order.course_id);
       }
+
+      // Update order status
+      const { error: updateError } = await supabaseAdmin
+        .from('orders')
+        .update({ 
+          status: 'completed',
+          payment_reference: (lookupData?.transaction_id) || pidx || 'khalti-payment',
+        })
+        .eq('id', order.id);
+
+      if (updateError) {
+        console.error('Order update error:', updateError);
+        throw new Error('Failed to update order');
+      }
+
+      // Check if enrollment already exists
+      const { data: existingEnrollment, error: checkError } = await supabaseAdmin
+        .from('enrollments')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('course_id', order.course_id)
+        .single();
+
+      // Create enrollment only if it doesn't exist
+      if (!existingEnrollment && checkError?.code === 'PGRST116') {
+        const { error: enrollError } = await supabaseAdmin
+          .from('enrollments')
+          .insert({
+            user_id: user.id,
+            course_id: order.course_id,
+          });
+
+        if (enrollError) {
+          console.error('Enrollment creation error:', enrollError);
+          throw new Error('Failed to create enrollment');
+        }
+      } else if (existingEnrollment) {
+        console.log('Enrollment already exists for user:', user.id, 'course:', order.course_id);
+      } else if (checkError) {
+        console.error('Enrollment check error:', checkError);
+        throw new Error('Failed to check enrollment');
+      }
+
+      // Remove from cart if exists
+      await supabaseAdmin
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('course_id', order.course_id);
 
       return new Response(JSON.stringify({
         success: true,
-        message: `Payment verified and enrolled in ${courseIds.length} course(s)`,
-        courseIds,
-        courseId: courseIds[0], // For backwards compatibility
+        message: 'Payment verified and enrollment created',
+        courseId: order.course_id,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

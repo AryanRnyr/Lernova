@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/accordion';
 import { Star, Clock, Users, PlayCircle, Lock, CheckCircle, BookOpen, ShoppingCart, GraduationCap, MessageSquarePlus } from 'lucide-react';
 import { useActivityLog } from '@/hooks/useActivityLog';
+import { CourseChat } from '@/components/course/CourseChat';
 
 interface Subsection {
   id: string;
@@ -42,6 +43,8 @@ interface Course {
   description: string | null;
   thumbnail_url: string | null;
   price: number;
+  current_price: number | null;
+  dynamic_pricing_enabled: boolean;
   is_free: boolean;
   total_duration: number | null;
   status: string;
@@ -101,6 +104,8 @@ const CourseDetail = () => {
           description,
           thumbnail_url,
           price,
+          current_price,
+          dynamic_pricing_enabled,
           is_free,
           total_duration,
           status,
@@ -135,6 +140,8 @@ const CourseDetail = () => {
         difficulty_level: courseData.difficulty_level || 'beginner',
         average_rating: courseData.average_rating || 0,
         total_reviews: courseData.total_reviews || 0,
+        current_price: courseData.current_price,
+        dynamic_pricing_enabled: courseData.dynamic_pricing_enabled || false,
       } as Course);
 
       // Log course view activity
@@ -420,7 +427,14 @@ const CourseDetail = () => {
                     {course.is_free ? (
                       <span className="text-green-600">Free</span>
                     ) : (
-                      formatPrice(course.price)
+                      <div>
+                        {formatPrice(course.current_price || course.price)}
+                        {course.dynamic_pricing_enabled && (
+                          <span className="block text-xs text-muted-foreground font-normal mt-1">
+                            Price adjusts based on demand
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -505,58 +519,69 @@ const CourseDetail = () => {
       {/* Curriculum Section */}
       <section className="py-8 md:py-12">
         <div className="container">
-          <div className="lg:w-2/3">
-            <h2 className="text-2xl font-bold mb-6">Course Curriculum</h2>
-            
-            {sections.length === 0 ? (
-              <p className="text-muted-foreground">No curriculum available yet.</p>
-            ) : (
-              <Accordion type="multiple" className="space-y-4">
-                {sections.map((section, sectionIndex) => (
-                  <AccordionItem key={section.id} value={section.id} className="border rounded-lg px-4">
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-3 text-left">
-                        <span className="font-medium">
-                          Section {sectionIndex + 1}: {section.title}
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          {section.subsections.length} lectures
-                        </span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-2 pt-2">
-                        {section.subsections.map((lecture, lectureIndex) => (
-                          <div
-                            key={lecture.id}
-                            className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50"
-                          >
-                            <div className="flex items-center gap-3">
-                              {lecture.is_preview || isEnrolled ? (
-                                <PlayCircle className="h-4 w-4 text-primary" />
-                              ) : (
-                                <Lock className="h-4 w-4 text-muted-foreground" />
-                              )}
-                              <span>
-                                {sectionIndex + 1}.{lectureIndex + 1} {lecture.title}
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <h2 className="text-2xl font-bold mb-6">Course Curriculum</h2>
+              
+              {sections.length === 0 ? (
+                <p className="text-muted-foreground">No curriculum available yet.</p>
+              ) : (
+                <Accordion type="multiple" className="space-y-4">
+                  {sections.map((section, sectionIndex) => (
+                    <AccordionItem key={section.id} value={section.id} className="border rounded-lg px-4">
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center gap-3 text-left">
+                          <span className="font-medium">
+                            Section {sectionIndex + 1}: {section.title}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {section.subsections.length} lectures
+                          </span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-2 pt-2">
+                          {section.subsections.map((lecture, lectureIndex) => (
+                            <div
+                              key={lecture.id}
+                              className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50"
+                            >
+                              <div className="flex items-center gap-3">
+                                {lecture.is_preview || isEnrolled ? (
+                                  <PlayCircle className="h-4 w-4 text-primary" />
+                                ) : (
+                                  <Lock className="h-4 w-4 text-muted-foreground" />
+                                )}
+                                <span>
+                                  {sectionIndex + 1}.{lectureIndex + 1} {lecture.title}
+                                </span>
+                                {lecture.is_preview && !isEnrolled && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Preview
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-sm text-muted-foreground">
+                                {formatDuration(lecture.duration)}
                               </span>
-                              {lecture.is_preview && !isEnrolled && (
-                                <Badge variant="outline" className="text-xs">
-                                  Preview
-                                </Badge>
-                              )}
                             </div>
-                            <span className="text-sm text-muted-foreground">
-                              {formatDuration(lecture.duration)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            )}
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
+            </div>
+            
+            {/* Course Chat Assistant */}
+            <div className="lg:sticky lg:top-24 h-fit">
+              <CourseChat
+                courseTitle={course.title}
+                courseDescription={course.description}
+                sections={sections}
+              />
+            </div>
           </div>
         </div>
       </section>

@@ -45,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, MessageSquare, Receipt } from 'lucide-react';
+import { Users, BookOpen, FolderOpen, Plus, Edit, Trash2, Eye, Clock, Settings, Ban, DollarSign, TrendingUp, MessageSquare, Receipt, Check, X, Image } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InstructorDetailsDialog } from '@/components/admin/InstructorDetailsDialog';
 import { SalesPayoutsTab } from '@/components/admin/SalesPayoutsTab';
@@ -79,8 +79,12 @@ interface CourseForAdmin {
   status: string;
   price: number;
   instructor_name: string | null;
+  instructor_id: string;
   last_edited_by: string | null;
   last_edited_at: string | null;
+  category_name: string | null;
+  thumbnail_url: string | null;
+  created_at: string;
 }
 
 interface SalesData {
@@ -118,6 +122,12 @@ const AdminDashboard = () => {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryDescription, setCategoryDescription] = useState('');
+  
+  // Rejection dialog
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [courseToReject, setCourseToReject] = useState<CourseForAdmin | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [pendingCoursesCount, setPendingCoursesCount] = useState(0);
 
   useEffect(() => {
     if (isAdmin() && !hasFetched && !roleLoading) {
@@ -223,21 +233,27 @@ const AdminDashboard = () => {
       // Fetch all courses for admin management
       const { data: coursesData } = await supabase
         .from('courses')
-        .select('id, title, slug, status, price, instructor_id, last_edited_by, last_edited_at')
+        .select(`
+          id, title, slug, status, price, instructor_id, 
+          last_edited_by, last_edited_at, thumbnail_url, created_at,
+          category:categories(name)
+        `)
         .order('created_at', { ascending: false });
 
       if (coursesData) {
         const coursesWithInstructors = await Promise.all(
-          coursesData.map(async (course) => {
+          coursesData.map(async (course: any) => {
             const { data: instructor } = await supabase
               .rpc('get_instructor_profile', { instructor_user_id: course.instructor_id });
             return {
               ...course,
               instructor_name: instructor?.[0]?.full_name || 'Unknown',
+              category_name: course.category?.name || null,
             };
           })
         );
         setCourses(coursesWithInstructors);
+        setPendingCoursesCount(coursesWithInstructors.filter((c: any) => c.status === 'pending').length);
       }
 
       // Fetch sales data
@@ -487,6 +503,76 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleApproveCourse = async (course: CourseForAdmin) => {
+    try {
+      // Update course status
+      const { error } = await supabase
+        .from('courses')
+        .update({ status: 'published' })
+        .eq('id', course.id);
+
+      if (error) throw error;
+
+      // Increment instructor's approved courses count
+      await supabase.rpc('increment_approved_course_count', {
+        instructor_user_id: course.instructor_id
+      });
+
+      // Notify the instructor
+      await supabase.from('notifications').insert({
+        user_id: course.instructor_id,
+        title: 'Course Approved!',
+        message: `Your course "${course.title}" has been approved and is now published.`,
+        type: 'system',
+        notification_type: 'system'
+      });
+
+      await fetchData();
+      toast({ title: 'Course approved', description: 'The course is now published.' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    }
+  };
+
+  const handleRejectCourse = async () => {
+    if (!courseToReject) return;
+    
+    try {
+      const { error } = await supabase
+        .from('courses')
+        .update({ 
+          status: 'rejected',
+          rejection_reason: rejectionReason || 'No reason provided'
+        })
+        .eq('id', courseToReject.id);
+
+      if (error) throw error;
+
+      // Notify the instructor
+      await supabase.from('notifications').insert({
+        user_id: courseToReject.instructor_id,
+        title: 'Course Rejected',
+        message: `Your course "${courseToReject.title}" was not approved. Reason: ${rejectionReason || 'No reason provided'}`,
+        type: 'system',
+        notification_type: 'system'
+      });
+
+      setRejectDialogOpen(false);
+      setCourseToReject(null);
+      setRejectionReason('');
+      await fetchData();
+      toast({ title: 'Course rejected' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message });
+    }
+  };
+
+  const openRejectDialog = (course: CourseForAdmin) => {
+    setCourseToReject(course);
+    setRejectionReason('');
+    setRejectDialogOpen(true);
+  };
+
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('ne-NP', {
       style: 'currency',
@@ -623,7 +709,15 @@ const AdminDashboard = () => {
             </TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="users">Users & Roles</TabsTrigger>
-            <TabsTrigger value="courses">Courses</TabsTrigger>
+            <TabsTrigger value="pending-courses" className="relative">
+              Pending Courses
+              {courses.filter(c => c.status === 'pending').length > 0 && (
+                <Badge className="ml-2 bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                  {courses.filter(c => c.status === 'pending').length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="courses">All Courses</TabsTrigger>
             <TabsTrigger value="sales">Sales & Payouts</TabsTrigger>
           </TabsList>
 
@@ -903,6 +997,86 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="pending-courses">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Course Approvals</CardTitle>
+                <CardDescription>
+                  Review and approve courses from new instructors. Trusted instructors can publish directly.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
+                ) : courses.filter(c => c.status === 'pending').length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No pending courses.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {courses.filter(c => c.status === 'pending').map((course) => (
+                      <div key={course.id} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <div className="flex-shrink-0 w-24 h-16 rounded overflow-hidden bg-muted">
+                          {course.thumbnail_url ? (
+                            <img
+                              src={course.thumbnail_url}
+                              alt={course.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Image className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold truncate">{course.title}</h3>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <span>By {course.instructor_name}</span>
+                            {course.category_name && (
+                              <Badge variant="outline">{course.category_name}</Badge>
+                            )}
+                            <span>{formatPrice(course.price)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Created: {new Date(course.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link to={`/course/${course.slug}`}>
+                              <Eye className="h-4 w-4 mr-1" />
+                              Preview
+                            </Link>
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproveCourse(course)}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => openRejectDialog(course)}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="courses">
             <Card>
               <CardHeader>
@@ -1024,6 +1198,37 @@ const AdminDashboard = () => {
             onReject={handleRejectInstructor}
           />
         )}
+
+        {/* Course Rejection Dialog */}
+        <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Course</DialogTitle>
+              <DialogDescription>
+                Provide a reason for rejecting "{courseToReject?.title}". This will be sent to the instructor.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="rejection-reason">Rejection Reason</Label>
+                <Input
+                  id="rejection-reason"
+                  placeholder="e.g., Content does not meet quality standards..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleRejectCourse}>
+                Reject Course
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   );

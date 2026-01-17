@@ -28,6 +28,7 @@ interface Course {
   slug: string;
   status: string;
   price: number;
+  current_price: number | null;
   is_free: boolean;
   created_at: string;
   thumbnail_url: string | null;
@@ -70,6 +71,7 @@ const InstructorDashboard = () => {
           slug,
           status,
           price,
+          current_price,
           is_free,
           created_at,
           thumbnail_url,
@@ -388,7 +390,7 @@ const InstructorDashboard = () => {
                           <span>•</span>
                           <span>{course.enrollments?.[0]?.count || 0} students</span>
                           <span>•</span>
-                          <span>{course.is_free ? 'Free' : formatPrice(course.price)}</span>
+                          <span>{course.is_free ? 'Free' : formatPrice(course.current_price ?? course.price)}</span>
                         </div>
                       </div>
                     </div>

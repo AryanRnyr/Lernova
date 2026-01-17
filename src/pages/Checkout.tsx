@@ -94,14 +94,17 @@ const Checkout = () => {
         return;
       }
 
-      // Calculate total for paid items
-      const totalAmount = paidItems.reduce((sum, item) => sum + (item.course?.price || 0), 0);
+      // Calculate total for paid items using current_price
+      const totalAmount = paidItems.reduce((sum, item) => {
+        const price = item.course?.current_price ?? item.course?.price ?? 0;
+        return sum + price;
+      }, 0);
       
       // Prepare course data for multi-course payment
       const courseData = paidItems.map(item => ({
         id: item.course!.id,
         title: item.course!.title,
-        price: item.course!.price,
+        price: item.course!.current_price ?? item.course!.price ?? 0,
       }));
 
       // Paid courses - initiate payment
@@ -293,7 +296,7 @@ const Checkout = () => {
                   <div key={item.id} className="flex justify-between">
                     <span className="text-sm line-clamp-1 flex-1 mr-4">{item.course?.title}</span>
                     <span className="font-medium">
-                      {item.course?.is_free ? 'Free' : formatPrice(item.course?.price || 0)}
+                      {item.course?.is_free ? 'Free' : formatPrice(item.course?.current_price ?? item.course?.price ?? 0)}
                     </span>
                   </div>
                 ))}

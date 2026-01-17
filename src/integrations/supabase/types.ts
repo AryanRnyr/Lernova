@@ -185,17 +185,25 @@ export type Database = {
       courses: {
         Row: {
           average_rating: number | null
+          base_price: number | null
           category_id: string | null
           created_at: string
+          current_price: number | null
           description: string | null
           difficulty_level: string | null
+          dynamic_pricing_enabled: boolean | null
+          enrollment_target: number | null
           id: string
           instructor_id: string
           is_free: boolean
           last_edited_at: string | null
           last_edited_by: string | null
+          last_price_update: string | null
+          max_price: number | null
+          min_price: number | null
           price: number
           recommended_price: number | null
+          rejection_reason: string | null
           slug: string
           status: Database["public"]["Enums"]["course_status"]
           thumbnail_url: string | null
@@ -206,17 +214,25 @@ export type Database = {
         }
         Insert: {
           average_rating?: number | null
+          base_price?: number | null
           category_id?: string | null
           created_at?: string
+          current_price?: number | null
           description?: string | null
           difficulty_level?: string | null
+          dynamic_pricing_enabled?: boolean | null
+          enrollment_target?: number | null
           id?: string
           instructor_id: string
           is_free?: boolean
           last_edited_at?: string | null
           last_edited_by?: string | null
+          last_price_update?: string | null
+          max_price?: number | null
+          min_price?: number | null
           price?: number
           recommended_price?: number | null
+          rejection_reason?: string | null
           slug: string
           status?: Database["public"]["Enums"]["course_status"]
           thumbnail_url?: string | null
@@ -227,17 +243,25 @@ export type Database = {
         }
         Update: {
           average_rating?: number | null
+          base_price?: number | null
           category_id?: string | null
           created_at?: string
+          current_price?: number | null
           description?: string | null
           difficulty_level?: string | null
+          dynamic_pricing_enabled?: boolean | null
+          enrollment_target?: number | null
           id?: string
           instructor_id?: string
           is_free?: boolean
           last_edited_at?: string | null
           last_edited_by?: string | null
+          last_price_update?: string | null
+          max_price?: number | null
+          min_price?: number | null
           price?: number
           recommended_price?: number | null
+          rejection_reason?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["course_status"]
           thumbnail_url?: string | null
@@ -319,6 +343,7 @@ export type Database = {
         Row: {
           account_id: string | null
           account_name: string | null
+          approved_courses_count: number | null
           bio: string | null
           created_at: string
           current_occupation: string | null
@@ -327,6 +352,7 @@ export type Database = {
           id: string
           payment_method: string | null
           resume_url: string | null
+          trust_level: string | null
           updated_at: string
           user_id: string
           years_of_experience: number | null
@@ -334,6 +360,7 @@ export type Database = {
         Insert: {
           account_id?: string | null
           account_name?: string | null
+          approved_courses_count?: number | null
           bio?: string | null
           created_at?: string
           current_occupation?: string | null
@@ -342,6 +369,7 @@ export type Database = {
           id?: string
           payment_method?: string | null
           resume_url?: string | null
+          trust_level?: string | null
           updated_at?: string
           user_id: string
           years_of_experience?: number | null
@@ -349,6 +377,7 @@ export type Database = {
         Update: {
           account_id?: string | null
           account_name?: string | null
+          approved_courses_count?: number | null
           bio?: string | null
           created_at?: string
           current_occupation?: string | null
@@ -357,6 +386,7 @@ export type Database = {
           id?: string
           payment_method?: string | null
           resume_url?: string | null
+          trust_level?: string | null
           updated_at?: string
           user_id?: string
           years_of_experience?: number | null
@@ -863,6 +893,13 @@ export type Database = {
           full_name: string
         }[]
       }
+      get_instructor_trust_level: {
+        Args: { instructor_user_id: string }
+        Returns: {
+          approved_courses_count: number
+          trust_level: string
+        }[]
+      }
       get_reviewer_name: { Args: { reviewer_user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -871,20 +908,25 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_approved_course_count: {
+        Args: { instructor_user_id: string }
+        Returns: undefined
+      }
       search_courses: {
         Args: {
           category_filter?: string
           difficulty_filter?: string
-          max_price?: number
-          min_price?: number
-          min_rating?: number
+          p_max_price?: number
+          p_min_price?: number
+          p_min_rating?: number
           price_type?: string
-          search_term: string
+          search_term?: string
         }
         Returns: {
           average_rating: number
           category_id: string
           category_name: string
+          current_price: number
           description: string
           difficulty_level: string
           enrollment_count: number
@@ -899,6 +941,11 @@ export type Database = {
           total_duration: number
           total_reviews: number
         }[]
+      }
+      update_all_dynamic_prices: { Args: never; Returns: number }
+      update_course_dynamic_pricing: {
+        Args: { course_uuid: string }
+        Returns: undefined
       }
     }
     Enums: {
